@@ -6,7 +6,7 @@ class Config:
     
     # 数据库配置
     SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 
-        'mysql+pymysql://user:password@db:3306/dictation')
+        'mysql+pymysql://dictation_user:your_password@localhost:3306/dictation')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # JWT配置

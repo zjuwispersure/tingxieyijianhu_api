@@ -15,6 +15,7 @@ class Child(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     dictations = db.relationship('Dictation', backref='child', lazy=True)
+    dictation_tasks = relationship("DictationTask", back_populates="child")
     
     def to_dict(self):
         return {

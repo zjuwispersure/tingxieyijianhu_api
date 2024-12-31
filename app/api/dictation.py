@@ -1,79 +1,110 @@
-from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models.dictation import Dictation
-from ..utils.forgetting_curve import calculate_review_words
-from ..extensions import db
+from flask import Blueprint, jsonify, request, g
+from datetime import datetime
+import random
+from app.models import DictationTask, Word, WordLearningStatus
+from app.utils.auth import login_required
 
-dictation_bp = Blueprint('dictation', __name__)
+bp = Blueprint('dictation', __name__)
 
-@dictation_bp.route('/dictation', methods=['POST'])
-@jwt_required()
-def start_dictation():
-    """开始听写"""
+@bp.route('/api/dictation/yuwen/by_unit', methods=['POST'])
+@login_required
+def yuwen_unit_dictation():
+    """语文按单元听写"""
     data = request.get_json()
+    child_id = data['child_id']
+    unit = data['unit']
+    grade = data['grade']
+    semester = data['semester']
+    config = data.get('config', {})
     
-    dictation = Dictation(
-        child_id=data['child_id'],
-        mode=data['mode'],
-        word_count=data['word_count'],
-        repeat_count=data['repeat_count'],
-        interval=data['interval'],
-        prioritize_errors=data['prioritize_errors']
+    # 获取单元词语
+    words = Word.query.filter_by(
+        grade=grade,
+        semester=semester,
+        unit=unit,
+        subject='yuwen'  # 标记学科
+    ).all()
+    
+    task = create_dictation_task(
+        user_id=g.user.id,
+        child_id=child_id,
+        words=words,
+        subject='yuwen',
+        source='unit',
+        config=config
     )
     
-    # 根据遗忘曲线算法选择单词
-    words = calculate_review_words(data['child_id'], data['word_count'])
-    dictation.content = words
+    return jsonify({
+        'code': 0,
+        'data': task.to_dict()
+    })
+
+@bp.route('/api/dictation/yuwen/smart', methods=['POST'])
+@login_required
+def yuwen_smart_dictation():
+    """语文智能听写"""
+    data = request.get_json()
+    child_id = data['child_id']
+    config = data.get('config', {})
     
-    db.session.add(dictation)
+    # 获取需要复习的词语
+    words = get_review_words(
+        child_id=child_id,
+        subject='yuwen',
+        limit=config.get('words_per_dictation', 10)
+    )
+    
+    task = create_dictation_task(
+        user_id=g.user.id,
+        child_id=child_id,
+        words=words,
+        subject='yuwen',
+        source='smart',
+        config=config
+    )
+    
+    return jsonify({
+        'code': 0,
+        'data': task.to_dict()
+    })
+
+def get_review_words(child_id, subject, limit=10):
+    """获取需要复习的词语"""
+    now = datetime.utcnow()
+    
+    # 获取所有需要复习的词语状态
+    learning_status = WordLearningStatus.query.join(Word).filter(
+        WordLearningStatus.child_id == child_id,
+        WordLearningStatus.next_review_time <= now,
+        Word.subject == subject
+    ).all()
+    
+    # 计算选择权重
+    word_weights = [
+        (status.word, 1 - status.mastery_level)
+        for status in learning_status
+    ]
+    
+    # 加权随机选择
+    if word_weights:
+        words, weights = zip(*word_weights)
+        return random.choices(words, weights=weights, k=min(limit, len(words)))
+    return []
+
+def create_dictation_task(user_id, child_id, words, subject, source, config=None):
+    """创建听写任务"""
+    task = DictationTask(
+        user_id=user_id,
+        child_id=child_id,
+        subject=subject,
+        source=source,
+        words_count=len(words),
+        **config if config else {}
+    )
+    
+    # 保存任务词语
+    task.add_words(words)
+    db.session.add(task)
     db.session.commit()
     
-    return jsonify(dictation.to_dict())
-
-@dictation_bp.route('/dictation/<int:id>', methods=['GET'])
-@jwt_required()
-def get_dictation(id):
-    """获取听写内容"""
-    dictation = Dictation.query.get_or_404(id)
-    return jsonify(dictation.to_dict())
-
-@dictation_bp.route('/dictation/<int:id>/result', methods=['POST'])
-@jwt_required()
-def submit_result(id):
-    """提交听写结果"""
-    dictation = Dictation.query.get_or_404(id)
-    data = request.get_json()
-    
-    dictation.result = data['result']
-    db.session.commit()
-    
-    return jsonify(dictation.to_dict())
-
-@dictation_bp.route('/dictation/statistics/<int:id>', methods=['GET'])
-@jwt_required()
-def get_statistics(id):
-    """获取听写统计信息"""
-    dictation = Dictation.query.get_or_404(id)
-    
-    # 计算正确率等统计信息
-    stats = {
-        'total_words': len(dictation.content),
-        'correct_count': sum(1 for r in dictation.result if r['is_correct']),
-        'error_count': sum(1 for r in dictation.result if not r['is_correct']),
-        'created_at': dictation.created_at
-    }
-    
-    return jsonify(stats)
-
-@dictation_bp.route('/dictation/push', methods=['POST'])
-@jwt_required()
-def push_result():
-    """推送听写结果给家庭群组成员"""
-    data = request.get_json()
-    dictation_id = data['dictation_id']
-    
-    dictation = Dictation.query.get_or_404(dictation_id)
-    
-    # TODO: 实现推送逻辑，可以使用WebSocket或者微信消息推送
-    
-    return jsonify({'message': '推送成功'}) 
+    return task 
