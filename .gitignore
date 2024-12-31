@@ -4,8 +4,6 @@ __pycache__/
 *$py.class
 *.so
 .Python
-env/
-venv/
 build/
 develop-eggs/
 dist/
@@ -24,8 +22,11 @@ wheels/
 
 # Virtual Environment
 venv/
+env/
 ENV/
 .env
+.venv
+.venv/
 
 # IDE
 .idea/
@@ -33,29 +34,51 @@ ENV/
 *.swp
 *.swo
 .DS_Store
+*.sublime-workspace
+*.sublime-project
 
 # Flask
 instance/
 .webassets-cache
+.flask_session/
 
 # Database
 *.db
+*.sqlite
 *.sqlite3
 
 # Logs
-*.log
 logs/
+*.log
 
-# Unit test / coverage reports
+# Audio files
+data/yuwen/renjiaoban/*/audio_*/
+data/yuwen/renjiaoban/*/audio_识字/
+data/yuwen/renjiaoban/*/audio_写字/
+data/yuwen/renjiaoban/*/audio_词语/
+
+# Test coverage
+.coverage
 htmlcov/
 .tox/
-.coverage
+.nox/
 .coverage.*
 .cache
 nosetests.xml
 coverage.xml
 *.cover
+*.py,cover
 .hypothesis/
+.pytest_cache/
+
+# Misc
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.bak
+*.tmp
+*~
 
 # Docker
 docker-compose.override.yml
