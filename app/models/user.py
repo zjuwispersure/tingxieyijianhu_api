@@ -1,6 +1,9 @@
 from datetime import datetime
-from ..extensions import db
+from .base import Base
+from .database import db
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy.orm import relationship
+from flask_jwt_extended import create_access_token
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -32,3 +35,7 @@ class User(db.Model):
             from app.models.dictation_config import DictationConfig
             self.dictation_config = DictationConfig(user_id=self.id)
         return self.dictation_config 
+
+    def generate_token(self):
+        """生成JWT token"""
+        return create_access_token(identity=self.id) 

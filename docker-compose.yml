@@ -1,28 +1,39 @@
-version: '3'
+name: yuwen
 
 services:
-  web:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=sql@2024
+      - MYSQL_DATABASE=yuwen
+      - MYSQL_USER=yuwen
+      - MYSQL_PASSWORD=sql@2024
+    volumes:
+      - mysql_data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - yuwen-net
+
+  api:
     build: .
     ports:
       - "5000:5000"
     environment:
-      - FLASK_APP=wsgi.py
-      - FLASK_ENV=production
-      - DATABASE_URL=mysql+pymysql://user:password@db:3306/dictation
-    depends_on:
-      - db
-    
-  db:
-    image: mysql:8.0
-    environment:
-      - MYSQL_ROOT_PASSWORD=rootpassword
-      - MYSQL_DATABASE=dictation
-      - MYSQL_USER=user
-      - MYSQL_PASSWORD=password
+      - FLASK_ENV=development
+      - FLASK_APP=app
+      - DATABASE_URL=mysql+pymysql://yuwen:sql@2024@mysql:3306/yuwen
     volumes:
-      - db_data:/var/lib/mysql
-    ports:
-      - "3306:3306"
+      - .:/app
+    depends_on:
+      - mysql
+    networks:
+      - yuwen-net
 
 volumes:
-  db_data: 
+  mysql_data:
+
+networks:
+  yuwen-net:
+    driver: bridge 

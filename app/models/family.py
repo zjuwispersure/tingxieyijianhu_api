@@ -1,5 +1,8 @@
 from datetime import datetime
-from ..extensions import db
+from .base import Base
+from .database import db
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy.orm import relationship
 
 class Family(db.Model):
     __tablename__ = 'families'

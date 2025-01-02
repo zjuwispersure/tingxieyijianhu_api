@@ -18,3 +18,5 @@ pytest==7.3.1
 pytest-flask==1.2.0
 pytest-cov==4.1.0
 edge-tts>=6.1.9
+pandas
+pypinyin

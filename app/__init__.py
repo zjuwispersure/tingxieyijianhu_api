@@ -1,10 +1,14 @@
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
-
+import os
+import sys
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
-from .extensions import db, jwt
+from .models.database import db
+
+migrate = Migrate()
+jwt = JWTManager()
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -12,8 +16,8 @@ def create_app(config_class=Config):
     
     # 初始化扩展
     db.init_app(app)
+    migrate.init_app(app, db)
     jwt.init_app(app)
-    Migrate(app, db)
     
     # 注册蓝图
     from .api import auth_bp, user_bp, family_bp, dictation_bp

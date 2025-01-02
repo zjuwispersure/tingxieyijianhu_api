@@ -1,7 +1,9 @@
+from datetime import datetime
+from .base import Base
+from .database import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from .base import Base
-from datetime import datetime
+import enum
 
 class CharacterListType(Base):
     __tablename__ = 'character_list_types'
@@ -107,10 +109,11 @@ class CharacterList(Base):
     __tablename__ = 'character_lists'
     
     id = Column(Integer, primary_key=True)
-    type_id = Column(Integer, ForeignKey('character_list_types.id'), nullable=False)
+    name = Column(String(50), nullable=False)
+    subject = Column(String(20), nullable=False)  # 学科：yuwen/english
+    book_version = Column(String(20), nullable=False) # 教材版本：renjiaoban/renjiao
     grade = Column(Integer, nullable=False)
     semester = Column(Integer, nullable=False)
-    unit = Column(Integer, nullable=False)
     
     list_type = relationship("CharacterListType", back_populates="character_lists")
     list_items = relationship("CharacterListItem", back_populates="character_list")
@@ -127,13 +130,11 @@ class CharacterListItem(Base):
     character = relationship("Character", back_populates="list_items") 
 
 class CharacterAudio(Base):
-    __tablename__ = 'character_audio'
+    __tablename__ = 'character_audios'
     
     id = Column(Integer, primary_key=True)
     character_id = Column(Integer, ForeignKey('characters.id'), nullable=False)
-    audio_path = Column(String(255), nullable=False)
-    audio_type = Column(String(20), nullable=False)
-    duration = Column(Integer)
+    audio_path = Column(String(200), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    character = relationship("Character", back_populates="audio_files") 
+    character = relationship("Character", back_populates="audios") 

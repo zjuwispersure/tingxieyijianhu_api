@@ -1,5 +1,6 @@
 from datetime import datetime
 from ..extensions import db
+from sqlalchemy.orm import relationship
 
 class Child(db.Model):
     __tablename__ = 'children'

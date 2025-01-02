@@ -1,6 +1,8 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
-from sqlalchemy.orm import relationship
+from datetime import datetime
 from .base import Base
+from .database import db
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy.orm import relationship
 
 class DictationHint(Base):
     __tablename__ = 'dictation_hints'

@@ -1,12 +1,66 @@
 from flask import Blueprint, jsonify, request, g
 from datetime import datetime
 import random
-from app.models import DictationTask, Word, WordLearningStatus
-from app.utils.auth import login_required
+from ..models import (
+    DictationTask, Word, WordLearningStatus, 
+    Character, CharacterList, CharacterListItem
+)
+from ..models.database import db
+from ..utils.logger import log_message
+from ..utils.auth import login_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 
-bp = Blueprint('dictation', __name__)
+dictation_bp = Blueprint('dictation', __name__)
 
-@bp.route('/api/dictation/yuwen/by_unit', methods=['POST'])
+@dictation_bp.route('/api/dictation/word_list', methods=['GET'])
+@login_required
+def get_word_list():
+    """获取词语表"""
+    grade = request.args.get('grade', type=int)
+    semester = request.args.get('semester', type=int)
+    unit = request.args.get('unit', type=int)
+    
+    query = Word.query
+    
+    if grade:
+        query = query.filter_by(grade=grade)
+    if semester:
+        query = query.filter_by(semester=semester)
+    if unit:
+        query = query.filter_by(unit=unit)
+        
+    words = query.all()
+    
+    return jsonify({
+        'code': 0,
+        'data': [word.to_dict() for word in words]
+    })
+
+@dictation_bp.route('/api/dictation/character_list', methods=['GET'])
+@login_required
+def get_character_list():
+    """获取生字表"""
+    grade = request.args.get('grade', type=int)
+    semester = request.args.get('semester', type=int)
+    unit = request.args.get('unit', type=int)
+    
+    query = CharacterList.query.join(CharacterListItem).join(Character)
+    
+    if grade:
+        query = query.filter(CharacterList.grade == grade)
+    if semester:
+        query = query.filter(CharacterList.semester == semester)
+    if unit:
+        query = query.filter(CharacterList.unit == unit)
+        
+    character_lists = query.all()
+    
+    return jsonify({
+        'code': 0,
+        'data': [char_list.to_dict() for char_list in character_lists]
+    })
+
+@dictation_bp.route('/api/dictation/yuwen/by_unit', methods=['POST'])
 @login_required
 def yuwen_unit_dictation():
     """语文按单元听写"""
@@ -22,7 +76,7 @@ def yuwen_unit_dictation():
         grade=grade,
         semester=semester,
         unit=unit,
-        subject='yuwen'  # 标记学科
+        subject='yuwen'
     ).all()
     
     task = create_dictation_task(
@@ -39,7 +93,7 @@ def yuwen_unit_dictation():
         'data': task.to_dict()
     })
 
-@bp.route('/api/dictation/yuwen/smart', methods=['POST'])
+@dictation_bp.route('/api/dictation/yuwen/smart', methods=['POST'])
 @login_required
 def yuwen_smart_dictation():
     """语文智能听写"""
@@ -109,7 +163,7 @@ def create_dictation_task(user_id, child_id, words, subject, source, config=None
     
     return task 
 
-@bp.route('/api/dictation/statistics', methods=['GET'])
+@dictation_bp.route('/api/dictation/statistics', methods=['GET'])
 @login_required
 def get_dictation_statistics():
     """获取听写统计信息"""
@@ -144,7 +198,7 @@ def get_dictation_statistics():
         'sessions': [session.to_dict() for session in sessions]
     })
 
-@bp.route('/api/dictation/progress/<int:child_id>')
+@dictation_bp.route('/api/dictation/progress/<int:child_id>')
 @login_required
 def get_learning_progress(child_id):
     """获取学习进度"""
