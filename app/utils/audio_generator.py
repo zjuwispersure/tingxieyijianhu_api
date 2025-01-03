@@ -1,10 +1,10 @@
 import edge_tts
 import os
 
-class AudioGenerator:
-    def __init__(self, grade=4, semester=1, char_type='识字'):
+class YuwenAudioGenerator:
+    def __init__(self, grade=4, semester=1, char_type='识字', book_version='renjiaoban'):
         # 定义音频文件的基础目录
-        self.base_dir = 'data/yuwen/renjiaoban'
+        self.base_dir = 'data/yuwen/'+ book_version
         self.grade_dir = f'grade_{grade}_{semester}'
         # 根据字表类型区分音频目录
         self.relative_audio_dir = os.path.join(self.base_dir, self.grade_dir, f'audio_{char_type}')

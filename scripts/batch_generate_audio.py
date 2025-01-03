@@ -4,7 +4,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 import re
-from app.utils.audio_generator import AudioGenerator
+from app.utils.audio_generator import YuwenAudioGenerator
 
 async def generate_audio_for_file(input_file, audio_gen):
     """

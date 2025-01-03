@@ -1,10 +1,10 @@
 import pytest
 import os
-from app.utils.audio_generator import AudioGenerator
+from app.utils.audio_generator import YuwenAudioGenerator
 
 @pytest.mark.asyncio
 async def test_audio_generation():
-    generator = AudioGenerator(grade=4, semester=1)
+    generator = YuwenAudioGenerator(grade=4, semester=1)
     
     test_char = "盐"
     test_hint = "咸味的盐"
@@ -20,7 +20,7 @@ async def test_audio_generation():
 @pytest.mark.asyncio
 async def test_audio_cache():
     """测试音频文件缓存功能"""
-    generator = AudioGenerator(grade=4, semester=1)
+    generator = YuwenAudioGenerator(grade=4, semester=1)
     
     test_char = "盐"
     test_hint = "咸味的盐"

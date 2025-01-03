@@ -4,11 +4,11 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import asyncio
-from app.utils.audio_generator import AudioGenerator
+from app.utils.audio_generator import YuwenAudioGenerator
 
 async def test_audio():
     # 指定年级和学期
-    generator = AudioGenerator(grade=4, semester=1)
+    generator = YuwenAudioGenerator(grade=4, semester=1)
     
     # 测试单个字的生成
     test_char = "盐"

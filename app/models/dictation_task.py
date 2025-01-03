@@ -1,30 +1,58 @@
-from datetime import datetime
-from .base import Base
 from .database import db
-from sqlalchemy import Column, Integer, Float, DateTime, ForeignKey, String
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
-class DictationTask(Base):
-    """听写任务配置表"""
+class DictationTask(db.Model):
+    """听写任务"""
     __tablename__ = 'dictation_tasks'
     
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey('user.id'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     child_id = Column(Integer, ForeignKey('children.id'), nullable=False)
-    subject = Column(String(20), nullable=False)  # 学科：yuwen/english
-    source = Column(String(20), nullable=False)   # 来源：unit/smart
-    
-    # 听写配置
-    audio_play_count = Column(Integer, default=2)     # 音频播放次数
-    audio_interval = Column(Integer, default=3)       # 音频播放间隔(秒)
-    words_per_dictation = Column(Integer, default=10) # 每次听写词语数量
-    words_count = Column(Integer)                 # 实际词语数量
-    
-    # 任务状态
+    subject = Column(String(20), nullable=False)  # yuwen/english
+    source = Column(String(20), nullable=False)   # unit/smart
+    words_count = Column(Integer, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    is_active = Column(Integer, default=1)           # 是否激活
     
-    # 关联关系
-    user = relationship("User", back_populates="dictation_tasks")
+    # 关联的听写内容
+    items = relationship("DictationTaskItem", back_populates="task")
+    sessions = relationship("DictationSession", back_populates="task")
     child = relationship("Child", back_populates="dictation_tasks")
-    sessions = relationship("DictationSession", back_populates="task") 
+
+class DictationTaskItem(db.Model):
+    """听写任务内容项"""
+    __tablename__ = 'dictation_task_items'
+    
+    id = Column(Integer, primary_key=True)
+    task_id = Column(Integer, ForeignKey('dictation_tasks.id'), nullable=False)
+    yuwen_item_id = Column(Integer, ForeignKey('yuwen_items.id'), nullable=False)
+    is_correct = Column(Boolean, default=None)
+    answer = Column(String(50))
+    
+    task = relationship("DictationTask", back_populates="items")
+    yuwen_item = relationship("YuwenItem") 
+
+class DictationSession(db.Model):
+    """听写会话记录"""
+    __tablename__ = 'dictation_sessions'
+    
+    id = Column(Integer, primary_key=True)
+    task_id = Column(Integer, ForeignKey('dictation_tasks.id'), nullable=False)
+    start_time = Column(DateTime, default=datetime.utcnow)
+    end_time = Column(DateTime)
+    total_words = Column(Integer, nullable=False)
+    correct_count = Column(Integer, default=0)
+    
+    task = relationship("DictationTask", back_populates="sessions")
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'start_time': self.start_time.isoformat() if self.start_time else None,
+            'end_time': self.end_time.isoformat() if self.end_time else None,
+            'total_words': self.total_words,
+            'correct_count': self.correct_count,
+            'accuracy_rate': self.correct_count / self.total_words if self.total_words > 0 else 0
+        } 

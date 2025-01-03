@@ -1,186 +1,162 @@
 import os
 import sys
-import pandas as pd
 from pypinyin import pinyin, Style
+import re
+from urllib.parse import urljoin
 from dotenv import load_dotenv
+
+load_dotenv()
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app import create_app
-from app.models import Word, Character, WordCharacter, CharacterList, CharacterListItem, db
+from app.models import db
+from app.models.yuwen import YuwenItem
 
-# 加载环境变量
-load_dotenv()
+# 获取 OSS 配置
+OSS_CDN_DOMAIN = os.getenv('OSS_CDN_DOMAIN')
 
 def get_pinyin(text):
     """获取拼音"""
     return ' '.join([p[0] for p in pinyin(text, style=Style.TONE3)])
 
-def import_characters(char_path, list_name, audio_base_dir, subject, book_version, grade, semester):
-    """导入字表数据
+def parse_unit_text(unit_text):
+    """解析单元标记
     Args:
-        char_path: 字表文件路径（识字表或写字表）
-        list_name: 字表类型名称（'识字' 或 '写字'）
-        audio_base_dir: 音频文件目录
-        subject: 学科
+        unit_text: 单元标记文本，如 [Unit 1] 或 [语文园地一]
+    Returns:
+        str: 单元标记，如 'Unit 1' 或 '语文园地一'
+    """
+    # 移除方括号并返回内容
+    return unit_text.strip('[]')
+
+def import_items(file_path, item_type, audio_dir, book_version, grade, semester):
+    """导入字/词数据
+    Args:
+        file_path: 数据文件路径
+        item_type: 类型（识字/写字/词语）
+        audio_dir: OSS 音频目录路径
         book_version: 教材版本
         grade: 年级
         semester: 学期
     """
-    print(f"Importing {list_name} for {subject} {book_version} grade {grade} semester {semester}")
+    print(f"Importing {item_type} for {book_version} grade {grade} semester {semester}")
+    print(f"Audio OSS path: {audio_dir}")
     
-    # 读取字表
-    df = pd.read_csv(char_path, names=['character', 'unit'], dtype={'character': str, 'unit': int})
+    current_unit = None
+    items_to_add = []
     
-    # 创建字表类型
-    char_list = CharacterList.query.filter_by(
-        name=list_name,
-        subject=subject,
-        book_version=book_version,
-        grade=grade,
-        semester=semester
-    ).first()
-    
-    if not char_list:
-        char_list = CharacterList(
-            name=list_name,
-            subject=subject,
-            book_version=book_version,
-            grade=grade,
-            semester=semester
-        )
-        db.session.add(char_list)
-        db.session.flush()
-    
-    # 导入字表内容
-    for _, row in df.iterrows():
-        char = row['character'].strip()
-        unit = row['unit']
-        
-        # 查找音频文件
-        audio_path = os.path.join(audio_base_dir, f"{char}.mp3")
-        if not os.path.exists(audio_path):
-            print(f"Warning: Audio file not found for character: {char}")
-        
-        # 查找或创建汉字
-        character = Character.query.filter_by(character=char).first()
-        if not character:
-            character = Character(
-                character=char,
-                pinyin=get_pinyin(char),
-                audio_path=audio_path if os.path.exists(audio_path) else None
-            )
-            db.session.add(character)
-            db.session.flush()
-        
-        # 创建字表项
-        item = CharacterListItem.query.filter_by(
-            list_id=char_list.id,
-            character_id=character.id,
-            unit=unit
-        ).first()
-        if not item:
-            item = CharacterListItem(
-                list_id=char_list.id,
-                character_id=character.id,
-                unit=unit
-            )
-            db.session.add(item)
-    
-    db.session.commit()
-    print(f"{list_name} imported successfully")
-
-def import_words(ciyu_path, audio_dir, subject, textbook, grade, semester):
-    """导入词语表"""
-    print(f"Importing words for {subject} {textbook} grade {grade} semester {semester}")
-    
-    # 读取词语表
-    df = pd.read_csv(ciyu_path, names=['word', 'unit'], dtype={'word': str, 'unit': int})
-    
-    for _, row in df.iterrows():
-        word = row['word'].strip()
-        unit = row['unit']
-        
-        # 查找音频文件
-        audio_path = os.path.join(audio_dir, f"{word}.mp3")
-        if not os.path.exists(audio_path):
-            print(f"Warning: Audio file not found for word: {word}")
-            continue
-        
-        # 检查词语是否已存在
-        word_obj = Word.query.filter_by(
-            word=word,
-            subject=subject,
-            textbook=textbook,
-            grade=grade,
-            semester=semester,
-            unit=unit
-        ).first()
-        
-        if not word_obj:
-            # 创建新词语记录
-            word_obj = Word(
-                word=word,
-                subject=subject,
-                textbook=textbook,
-                grade=grade,
-                semester=semester,
-                unit=unit,
-                pinyin=get_pinyin(word),
-                audio_path=audio_path
-            )
-            db.session.add(word_obj)
-            db.session.flush()
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
             
-            # 为词语中的每个字创建关联
-            for i, char in enumerate(word):
-                character = Character.query.filter_by(character=char).first()
-                if not character:
-                    print(f"Warning: Character {char} not found in database")
+            # 处理单元标记
+            if line.startswith('['):
+                current_unit = parse_unit_text(line)
+                print(f"Processing {current_unit}")
+                continue
+            
+            if current_unit is None:
+                print(f"Warning: No unit specified for line: {line}")
+                continue
+            
+            if item_type == '词语':
+                # 词语表的每行可能包含多个词语，用空格分隔
+                for word in line.split():
+                    word = word.strip()
+                    if not word:
+                        continue
+                    
+                    pinyin = get_pinyin(word)  # 词语用生成的拼音
+                    hint = word  # 词语的提示词就是词语本身
+                    
+                    items_to_add.append({
+                        'word': word,
+                        'pinyin': pinyin,
+                        'hint': hint,
+                        'unit': current_unit
+                    })
+            else:
+                # 处理识字表和写字表的行，格式：字(pin1yin1):提示词
+                parts = line.split(':')
+                if len(parts) != 2:
+                    print(f"Warning: Invalid format for line: {line}")
                     continue
                 
-                word_char = WordCharacter(
-                    word_id=word_obj.id,
-                    character_id=character.id,
-                    position=i
-                )
-                db.session.add(word_char)
-        else:
-            # 更新已存在词语的音频路径
-            word_obj.audio_path = audio_path
+                char_with_pinyin, hint = parts
+                # 提取汉字和拼音
+                match = re.match(r'([^\(]+)\(([^\)]+)\)', char_with_pinyin)
+                if not match:
+                    print(f"Warning: Cannot parse character and pinyin: {char_with_pinyin}")
+                    continue
+                
+                word = match.group(1).strip()
+                pinyin = match.group(2).strip()  # 使用文件中的拼音
+                hint = hint.strip()
+                
+                items_to_add.append({
+                    'word': word,
+                    'pinyin': pinyin,
+                    'hint': hint,
+                    'unit': current_unit
+                })
+    
+    # 批量创建记录
+    for item_data in items_to_add:
+        word = item_data['word']
+        # 生成音频 URL
+        audio_url = f"{audio_dir}/{word}.mp3"
+        print(f"Audio URL: {audio_url}")
+        
+        # 创建数据记录
+        item = YuwenItem(
+            word=word,
+            type=item_type,
+            book_version=book_version,
+            grade=grade,
+            semester=semester,
+            unit=item_data['unit'],
+            pinyin=item_data['pinyin'],
+            hint=item_data['hint'],
+            audio_url=audio_url
+        )
+        db.session.add(item)
     
     db.session.commit()
-    print("Words imported successfully")
+    print(f"{item_type} imported successfully")
 
 def main():
     # 从环境变量获取基础路径
     DATA_DIR = os.getenv('DATA_DIR', 'data')
-    AUDIO_DIR = os.getenv('AUDIO_DIR', 'data')
+    OSS_CDN_DOMAIN = os.getenv('OSS_CDN_DOMAIN')
     
     # 导入参数
-    subject = 'yuwen'
     book_version = 'renjiaoban'
     grade = 4
     semester = 1
+    subject = 'yuwen'
+   
     
-    base_path  = os.path.join(
+    base_path = os.path.join(
         DATA_DIR,
         subject,
         book_version,
         f"grade_{grade}_{semester}"
-    ) 
-    # 构建路径
-    audio_base_path = os.path.join(
-        AUDIO_DIR,
+    )
+    oss_base_path = os.path.join(
+        OSS_CDN_DOMAIN,
+        'data',
         subject,
         book_version,
         f"grade_{grade}_{semester}"
-    )
+    ) 
     
     # 音频目录
     audio_dirs = {
-        '识字': os.path.join(audio_base_path, '_识字'),
-        '写字': os.path.join(audio_base_path, '_写字'),
-        '词语': os.path.join(audio_base_path, '_词语')
+        '识字': f"{oss_base_path}/audio_识字",
+        '写字': f"{oss_base_path}/audio_写字",
+        '词语': f"{oss_base_path}/audio_词语"
     }
     
     app = create_app()
@@ -188,32 +164,20 @@ def main():
         # 导入识字表
         shizi_path = os.path.join(base_path, "shizibiao.txt")
         if os.path.exists(shizi_path):
-            import_characters(
-                shizi_path, '识字', audio_dirs['识字'],
-                subject, book_version, grade, semester
-            )
-        else:
-            print("识字表 file not found")
+            import_items(shizi_path, '识字', audio_dirs['识字'], 
+                       book_version, grade, semester)
         
         # 导入写字表
         xiezi_path = os.path.join(base_path, "xiezibiao.txt")
         if os.path.exists(xiezi_path):
-            import_characters(
-                xiezi_path, '写字', audio_dirs['写字'],
-                subject, book_version, grade, semester
-            )
-        else:
-            print("写字表 file not found")
+            import_items(xiezi_path, '写字', audio_dirs['写字'],
+                       book_version, grade, semester)
         
         # 导入词语表
         ciyu_path = os.path.join(base_path, "ciyubiao.txt")
         if os.path.exists(ciyu_path):
-            import_words(
-                ciyu_path, audio_dirs['词语'],
-                subject, book_version, grade, semester
-            )
-        else:
-            print("词语表 file not found")
+            import_items(ciyu_path, '词语', audio_dirs['词语'],
+                       book_version, grade, semester)
 
 if __name__ == '__main__':
     main() 

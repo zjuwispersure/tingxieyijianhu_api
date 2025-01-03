@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, jsonify
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 import os
@@ -25,5 +25,9 @@ def create_app(config_class=Config):
     app.register_blueprint(user_bp, url_prefix='/api')
     app.register_blueprint(family_bp, url_prefix='/api')
     app.register_blueprint(dictation_bp, url_prefix='/api')
+    
+    @app.route('/health')
+    def health_check():
+        return jsonify({'status': 'ok'})
     
     return app 

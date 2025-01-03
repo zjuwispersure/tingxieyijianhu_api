@@ -1,29 +1,41 @@
 #!/bin/bash
 
-# 确保脚本在错误时退出
-set -e
+# 停止所有服务
+docker-compose down
 
-echo "开始初始化数据库..."
+# 删除数据卷
+docker volume rm yuwen_mysql_data || true
 
-# 创建数据库目录
-mkdir -p instance
+# 删除迁移文件
+rm -rf migrations/versions/*
 
-# 初始化数据库
-echo "创建数据库表..."
-flask db upgrade
+# 重新启动服务
+docker-compose up -d
 
-# 导入基础数据
-echo "导入字表数据..."
-python scripts/import_characters.py
+# 等待 API 服务启动（此时 MySQL 已经准备好）
+echo "Waiting for API service to start..."
+MAX_RETRIES=30
+RETRY_COUNT=0
 
-# 生成音频文件
-echo "生成识字表音频..."
-python scripts/generate_shizi_audio.py
+while ! curl -s http://localhost:5000/health > /dev/null && [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    echo "Waiting for API service... ($(( RETRY_COUNT + 1 ))/$MAX_RETRIES)"
+    sleep 2
+    RETRY_COUNT=$(( RETRY_COUNT + 1 ))
+done
 
-echo "生成写字表音频..."
-python scripts/generate_xiezi_audio.py
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    echo "Error: API service failed to start"
+    docker-compose logs api
+    exit 1
+fi
 
-echo "生成词语表音频..."
-python scripts/generate_ciyu_audio.py
+echo "API service is ready"
+sleep 2  # 给应用一点额外时间完全启动
 
-echo "数据库初始化完成！" 
+# 初始化迁移
+docker-compose exec api flask db init || true
+docker-compose exec api flask db migrate -m "Initial migration"
+docker-compose exec api flask db upgrade
+
+# 运行导入脚本
+docker-compose exec api python scripts/import_yuwen_data.py 
