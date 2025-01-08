@@ -1,183 +1,166 @@
 import os
 import sys
-from pypinyin import pinyin, Style
-import re
-from urllib.parse import urljoin
-from dotenv import load_dotenv
+import pandas as pd
+from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
+import logging
+from datetime import datetime
+from pathlib import Path
 
-load_dotenv()
+# 设置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(f'import_yuwen_{datetime.now().strftime("%Y%m%d")}.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from app import create_app
-from app.models import db
-from app.models.yuwen import YuwenItem
-
-# 获取 OSS 配置
-OSS_CDN_DOMAIN = os.getenv('OSS_CDN_DOMAIN')
-
-def get_pinyin(text):
-    """获取拼音"""
-    return ' '.join([p[0] for p in pinyin(text, style=Style.TONE3)])
-
-def parse_unit_text(unit_text):
-    """解析单元标记
-    Args:
-        unit_text: 单元标记文本，如 [Unit 1] 或 [语文园地一]
-    Returns:
-        str: 单元标记，如 'Unit 1' 或 '语文园地一'
+class DataImporter:
+    """语文数据导入工具
+    
+    用于将Excel格式的语文学习项数据导入到数据库中
     """
-    # 移除方括号并返回内容
-    return unit_text.strip('[]')
-
-def import_items(file_path, item_type, audio_dir, book_version, grade, semester):
-    """导入字/词数据
-    Args:
-        file_path: 数据文件路径
-        item_type: 类型（识字/写字/词语）
-        audio_dir: OSS 音频目录路径
-        book_version: 教材版本
-        grade: 年级
-        semester: 学期
-    """
-    print(f"Importing {item_type} for {book_version} grade {grade} semester {semester}")
-    print(f"Audio OSS path: {audio_dir}")
     
-    current_unit = None
-    items_to_add = []
-    
-    with open(file_path, 'r', encoding='utf-8') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-            
-            # 处理单元标记
-            if line.startswith('['):
-                current_unit = parse_unit_text(line)
-                print(f"Processing {current_unit}")
-                continue
-            
-            if current_unit is None:
-                print(f"Warning: No unit specified for line: {line}")
-                continue
-            
-            if item_type == '词语':
-                # 词语表的每行可能包含多个词语，用空格分隔
-                for word in line.split():
-                    word = word.strip()
-                    if not word:
-                        continue
-                    
-                    pinyin = get_pinyin(word)  # 词语用生成的拼音
-                    hint = word  # 词语的提示词就是词语本身
-                    
-                    items_to_add.append({
-                        'word': word,
-                        'pinyin': pinyin,
-                        'hint': hint,
-                        'unit': current_unit
-                    })
-            else:
-                # 处理识字表和写字表的行，格式：字(pin1yin1):提示词
-                parts = line.split(':')
-                if len(parts) != 2:
-                    print(f"Warning: Invalid format for line: {line}")
-                    continue
-                
-                char_with_pinyin, hint = parts
-                # 提取汉字和拼音
-                match = re.match(r'([^\(]+)\(([^\)]+)\)', char_with_pinyin)
-                if not match:
-                    print(f"Warning: Cannot parse character and pinyin: {char_with_pinyin}")
-                    continue
-                
-                word = match.group(1).strip()
-                pinyin = match.group(2).strip()  # 使用文件中的拼音
-                hint = hint.strip()
-                
-                items_to_add.append({
-                    'word': word,
-                    'pinyin': pinyin,
-                    'hint': hint,
-                    'unit': current_unit
-                })
-    
-    # 批量创建记录
-    for item_data in items_to_add:
-        word = item_data['word']
-        # 生成音频 URL
-        audio_url = f"{audio_dir}/{word}.mp3"
-        print(f"Audio URL: {audio_url}")
+    def __init__(self, db_url):
+        """初始化导入工具
         
-        # 创建数据记录
-        item = YuwenItem(
-            word=word,
-            type=item_type,
-            book_version=book_version,
-            grade=grade,
-            semester=semester,
-            unit=item_data['unit'],
-            pinyin=item_data['pinyin'],
-            hint=item_data['hint'],
-            audio_url=audio_url
-        )
-        db.session.add(item)
-    
-    db.session.commit()
-    print(f"{item_type} imported successfully")
+        Args:
+            db_url: 数据库连接URL
+        """
+        self.engine = create_engine(db_url)
+        self.required_columns = {
+            'word': '字/词',
+            'pinyin': '拼音',
+            'type': '类型',
+            'grade': '年级',
+            'semester': '学期',
+            'unit': '单元',
+            'textbook_version': '教材版本'
+        }
+        
+    def validate_file(self, file_path):
+        """验证Excel文件格式
+        
+        Args:
+            file_path: Excel文件路径
+            
+        Returns:
+            bool: 文件是否有效
+            str: 错误信息（如果有）
+        """
+        try:
+            if not os.path.exists(file_path):
+                return False, f'文件不存在: {file_path}'
+                
+            df = pd.read_excel(file_path)
+            
+            # 检查必要列
+            missing_columns = []
+            for col, cn_name in self.required_columns.items():
+                if cn_name not in df.columns:
+                    missing_columns.append(f'{cn_name}({col})')
+                    
+            if missing_columns:
+                return False, f'缺少必要列: {", ".join(missing_columns)}'
+                
+            return True, None
+            
+        except Exception as e:
+            return False, f'验证文件失败: {str(e)}'
+            
+    def transform_data(self, df):
+        """转换数据格式
+        
+        Args:
+            df: pandas DataFrame
+            
+        Returns:
+            DataFrame: 转换后的数据
+        """
+        # 列名映射
+        column_map = {v: k for k, v in self.required_columns.items()}
+        df = df.rename(columns=column_map)
+        
+        # 数据清理和转换
+        df['grade'] = pd.to_numeric(df['grade'], errors='coerce')
+        df['semester'] = pd.to_numeric(df['semester'], errors='coerce')
+        df['unit'] = pd.to_numeric(df['unit'], errors='coerce')
+        
+        # 去除无效数据
+        df = df.dropna(subset=['word', 'grade', 'semester', 'unit'])
+        
+        return df
+        
+    def import_data(self, file_path, batch_size=1000):
+        """导入数据
+        
+        Args:
+            file_path: Excel文件路径
+            batch_size: 批量导入大小
+            
+        Returns:
+            tuple: (成功数量, 错误信息)
+        """
+        try:
+            # 验证文件
+            is_valid, error = self.validate_file(file_path)
+            if not is_valid:
+                logger.error(f"文件验证失败: {error}")
+                return 0, error
+                
+            # 读取数据
+            logger.info(f"开始读取文件: {file_path}")
+            df = pd.read_excel(file_path)
+            
+            # 转换数据
+            df = self.transform_data(df)
+            total_rows = len(df)
+            logger.info(f"读取到 {total_rows} 条数据")
+            
+            # 批量导入
+            success_count = 0
+            for i in range(0, total_rows, batch_size):
+                batch = df.iloc[i:i+batch_size]
+                try:
+                    batch.to_sql(
+                        'yuwen_items',
+                        self.engine,
+                        if_exists='append',
+                        index=False
+                    )
+                    success_count += len(batch)
+                    logger.info(f"已导入 {success_count}/{total_rows} 条数据")
+                except SQLAlchemyError as e:
+                    logger.error(f"导入批次失败: {str(e)}")
+                    continue
+                    
+            return success_count, None
+            
+        except Exception as e:
+            error_msg = f"导入失败: {str(e)}"
+            logger.error(f"{error_msg}\n", exc_info=True)
+            return 0, error_msg
 
 def main():
-    # 从环境变量获取基础路径
-    DATA_DIR = os.getenv('DATA_DIR', 'data')
-    OSS_CDN_DOMAIN = os.getenv('OSS_CDN_DOMAIN')
-    
-    # 导入参数
-    book_version = 'renjiaoban'
-    grade = 4
-    semester = 1
-    subject = 'yuwen'
-   
-    
-    base_path = os.path.join(
-        DATA_DIR,
-        subject,
-        book_version,
-        f"grade_{grade}_{semester}"
-    )
-    oss_base_path = os.path.join(
-        OSS_CDN_DOMAIN,
-        'data',
-        subject,
-        book_version,
-        f"grade_{grade}_{semester}"
-    ) 
-    
-    # 音频目录
-    audio_dirs = {
-        '识字': f"{oss_base_path}/audio_识字",
-        '写字': f"{oss_base_path}/audio_写字",
-        '词语': f"{oss_base_path}/audio_词语"
-    }
-    
-    app = create_app()
-    with app.app_context():
-        # 导入识字表
-        shizi_path = os.path.join(base_path, "shizibiao.txt")
-        if os.path.exists(shizi_path):
-            import_items(shizi_path, '识字', audio_dirs['识字'], 
-                       book_version, grade, semester)
+    """主函数"""
+    if len(sys.argv) < 2:
+        print("Usage: python import_yuwen_data.py <excel_file>")
+        sys.exit(1)
         
-        # 导入写字表
-        xiezi_path = os.path.join(base_path, "xiezibiao.txt")
-        if os.path.exists(xiezi_path):
-            import_items(xiezi_path, '写字', audio_dirs['写字'],
-                       book_version, grade, semester)
-        
-        # 导入词语表
-        ciyu_path = os.path.join(base_path, "ciyubiao.txt")
-        if os.path.exists(ciyu_path):
-            import_items(ciyu_path, '词语', audio_dirs['词语'],
-                       book_version, grade, semester)
+    file_path = sys.argv[1]
+    db_url = os.getenv('DATABASE_URL', 'sqlite:///app.db')
+    
+    importer = DataImporter(db_url)
+    success_count, error = importer.import_data(file_path)
+    
+    if error:
+        logger.error(f"导入失败: {error}")
+        sys.exit(1)
+    else:
+        logger.info(f"导入完成，成功导入 {success_count} 条数据")
 
 if __name__ == '__main__':
     main() 

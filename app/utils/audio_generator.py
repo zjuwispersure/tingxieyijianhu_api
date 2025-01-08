@@ -1,5 +1,6 @@
 import edge_tts
 import os
+# 主流方案(CosyVoice，F5-TTS，MaskGCT，GPT-SoViTs等)
 
 class YuwenAudioGenerator:
     def __init__(self, grade=4, semester=1, char_type='识字', book_version='renjiaoban'):

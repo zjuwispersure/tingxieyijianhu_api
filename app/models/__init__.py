@@ -1,19 +1,27 @@
 from .database import db
-from .yuwen import YuwenItem
 from .user import User
+from .family import Family, FamilyMember
 from .child import Child
-from .family import Family
+from .yuwen_item import YuwenItem
+from .word_learning_status import WordLearningStatus
+from .dictation_task import DictationTask, DictationTaskItem
 from .dictation_config import DictationConfig
-from .dictation_task import DictationTask, DictationTaskItem, DictationSession
+from .achievement import Achievement
+from .user_achievement import UserAchievement
+from .notification import Notification
 
 __all__ = [
     'db',
-    'YuwenItem',
     'User',
-    'Child',
     'Family',
-    'DictationConfig',
+    'FamilyMember', 
+    'Child',
+    'YuwenItem',
+    'WordLearningStatus',
     'DictationTask',
     'DictationTaskItem',
-    'DictationSession'
+    'DictationConfig',
+    'Achievement',
+    'UserAchievement',
+    'Notification'
 ]

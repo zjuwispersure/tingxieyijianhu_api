@@ -1,97 +1,161 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, g
+from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required
+from ..utils.wx_service import get_openid
 from ..models import User
-from ..utils.wx_service import WXService
-from ..utils.logger import log_message
-from ..models.database import db
+from ..extensions import db
+from ..utils.logger import log_api_call
+from ..utils.error_codes import *
 import traceback
-from flask_jwt_extended import create_access_token
-from werkzeug.security import check_password_hash
+from sqlalchemy.exc import SQLAlchemyError
+from datetime import datetime, timedelta
+
+from app.utils import logger
 
 auth_bp = Blueprint('auth', __name__)
 
-@auth_bp.route('/api/login', methods=['POST'])
+@auth_bp.route('/auth/login', methods=['POST'])
+@log_api_call
 def login():
-    """微信登录接口"""
-    data = request.get_json()
-    code = data.get('code')
+    """微信小程序登录
     
-    # 记录登录请求
-    log_message({
-        "event": "login_attempt",
-        "code": code
-    })
+    请求参数:
+    {
+        "code": "wx_code"
+    }
     
-    if not code:
-        log_message({
-            "event": "login_error",
-            "error": "Missing code parameter"
-        })
-        return jsonify({'error': 'Missing code parameter'}), 400
-    
+    返回数据:
+    {
+        "status": "success",
+        "data": {
+            "access_token": "xxx",
+            "refresh_token": "xxx",
+            "user": {
+                "id": 1,
+                "nickname": "xxx"
+            }
+        }
+    }
+    """
     try:
-        # 初始化微信服务
-        wx_service = WXService(
-            app_id=current_app.config['WX_APP_ID'],
-            app_secret=current_app.config['WX_APP_SECRET']
-        )
-        
-        # 获取openid
-        openid = wx_service.get_openid(code, use_fallback=True)
-        is_temp_user = openid.startswith('temp_')
-        
-        if is_temp_user:
-            log_message({
-                "event": "using_temp_id",
-                "temp_id": openid,
-                "code": code,
-                "reason": "Failed to get real openid"
-            })
-        
-        # 查找或创建用户
-        user = User.query.filter_by(openid=openid).first()
-        if not user:
-            user = User(openid=openid)
-            db.session.add(user)
-            db.session.commit()
+        data = request.get_json()
+        if not data or 'code' not in data:
+            return jsonify({
+                'status': 'error',
+                'code': MISSING_REQUIRED_PARAM,
+                'message': get_error_message(MISSING_REQUIRED_PARAM, 'code')
+            }), 400
             
-            log_message({
-                "event": "new_user_created",
-                "openid": openid,
-                "is_temp": is_temp_user,
-                "user_id": user.id
-            })
+        code = data['code']
+        
+        # 测试模式
+        if code == 'test_code':
+            user = User.query.first()
+            if not user:
+                user = User(openid='test_openid')
+                db.session.add(user)
+                db.session.commit()
         else:
-            log_message({
-                "event": "user_login",
-                "user_id": user.id,
-                "openid": openid,
-                "is_temp": is_temp_user
-            })
-        
+            # 获取openid
+            openid = get_openid(code)
+            if not openid:
+                return jsonify({
+                    'status': 'error',
+                    'code': INVALID_WX_CODE,
+                    'message': get_error_message(INVALID_WX_CODE)
+                }), 400
+                
+            # 获取或创建用户
+            user = User.query.filter_by(openid=openid).first()
+            if not user:
+                user = User(openid=openid)
+                db.session.add(user)
+                db.session.commit()
+                
         # 生成token
-        token = user.generate_token()
-        
-        log_message({
-            "event": "login_success",
-            "user_id": user.id,
-            "is_temp": is_temp_user
-        })
+        access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
         
         return jsonify({
-            'code': 0,
+            'status': 'success',
             'data': {
-                'access_token': token,
+                'access_token': access_token,
+                'refresh_token': refresh_token,
                 'user': user.to_dict()
             }
         })
         
     except Exception as e:
-        log_message({
-            "event": "login_error",
-            "error": str(e),
-            "code": code,
-            "error_type": type(e).__name__,
-            "stack_trace": getattr(e, '__traceback__', None) and 
-                          ''.join(traceback.format_tb(e.__traceback__))
+        logger.error(f"登录失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500
+
+@auth_bp.route('/api/auth/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+@log_api_call
+def refresh_token():
+    """刷新访问令牌
+    
+    请求参数:
+    {
+        "refresh_token": "xxx"  # 必填，刷新令牌
+    }
+    
+    返回数据:
+    {
+        "status": "success",
+        "data": {
+            "access_token": "xxx"
+        }
+    }
+    """
+    try:
+        # 获取用户ID
+        user_id = get_jwt_identity()
+        
+        # 生成新的访问令牌
+        access_token = create_access_token(identity=user_id)
+        
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'access_token': access_token
+            }
         })
-        return jsonify({'error': 'Login failed'}), 500 
+        
+    except Exception as e:
+        logger.error(f"刷新令牌失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500
+
+@auth_bp.route('/auth/logout', methods=['POST'])
+@jwt_required()
+@log_api_call
+def logout():
+    """退出登录
+    
+    返回数据:
+    {
+        "status": "success",
+        "message": "退出成功"
+    }
+    """
+    try:
+        # TODO: 实现令牌黑名单
+        return jsonify({
+            'status': 'success',
+            'message': '退出成功'
+        })
+        
+    except Exception as e:
+        logger.error(f"退出登录失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500 

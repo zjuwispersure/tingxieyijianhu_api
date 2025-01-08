@@ -10,6 +10,9 @@ RUN rm -f /etc/apt/sources.list.d/*.list && \
     echo "deb http://mirrors.aliyun.com/debian-security bullseye-security main" >> /etc/apt/sources.list && \
     echo "deb http://mirrors.aliyun.com/debian bullseye-updates main non-free contrib" >> /etc/apt/sources.list
 
+# 安装 curl
+RUN apt-get update && apt-get install -y curl
+
 # 先复制配置文件
 COPY config.py .
 

@@ -3,25 +3,22 @@ name: yuwen
 services:
   mysql:
     image: mysql:5.7
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: yuwen
+      MYSQL_USER: yuwen
+      MYSQL_PASSWORD: sql2024
+      TZ: Asia/Shanghai
     ports:
       - "3306:3306"
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      timeout: 5s
-      retries: 10
-    environment:
-      - MYSQL_ROOT_PASSWORD=root
-      - MYSQL_DATABASE=yuwen
-      - MYSQL_USER=yuwen
-      - MYSQL_PASSWORD=sql@2024
-      - MYSQL_CHARACTER_SET_SERVER=utf8mb4
-      - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./mysql/conf.d:/etc/mysql/conf.d
-    command: --default-authentication-plugin=mysql_native_password
-    networks:
-      - yuwen-net
+    command: --default-authentication-plugin=mysql_native_password --default-time-zone='+8:00'
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   api:
     build: .
@@ -29,21 +26,11 @@ services:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
-      - FLASK_APP=app
-      - DATABASE_URL=mysql+pymysql://yuwen:sql@2024@mysql:3306/yuwen
-    volumes:
-      - .:/app
-      - ./data:/app/data
-      - ./audio:/app/audio
+      - DATABASE_URL=mysql+pymysql://yuwen:sql2024@mysql:3306/yuwen
+      - TZ=Asia/Shanghai
     depends_on:
       mysql:
         condition: service_healthy
-    networks:
-      - yuwen-net
 
 volumes:
-  mysql_data:
-
-networks:
-  yuwen-net:
-    driver: bridge 
+  mysql_data: 

@@ -1,6 +1,5 @@
 from .database import db
 from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.orm import relationship
 from datetime import datetime
 
 class User(db.Model):
@@ -11,7 +10,12 @@ class User(db.Model):
     nickname = Column(String(50))
     avatar_url = Column(String(200))
     created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime)
     
-    # 使用字符串引用避免循环导入
-    children = relationship("Child")
-    dictation_config = relationship("DictationConfig") 
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'nickname': self.nickname,
+            'openid': self.openid,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        } 

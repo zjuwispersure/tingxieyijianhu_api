@@ -1,42 +1,50 @@
-import json
 import logging
+import pytz
 from datetime import datetime
-from flask import request, g, current_app
+from functools import wraps
 
-def setup_logger():
-    """设置JSON格式的日志记录器"""
-    logger = logging.getLogger('yuwen')
-    logger.setLevel(logging.INFO)
-    
-    # 创建文件处理器
-    handler = logging.FileHandler('logs/yuwen.log')
-    handler.setLevel(logging.INFO)
-    
-    # 设置JSON格式
-    formatter = logging.Formatter('%(message)s')
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    
-    return logger
+# 设置北京时区
+beijing_tz = pytz.timezone('Asia/Shanghai')
 
-def log_message(message_dict):
-    """
-    记录JSON格式的日志
-    :param message_dict: 要记录的消息字典
-    """
-    logger = logging.getLogger('yuwen')
-    
-    # 添加基础信息
-    base_info = {
-        'timestamp': datetime.utcnow().isoformat(),
-        'ip': request.remote_addr if request else None,
-        'user_id': g.user.id if hasattr(g, 'user') else None,
-        'endpoint': request.endpoint if request else None,
-        'environment': current_app.config['ENV'] if current_app else 'unknown'
-    }
-    
-    # 合并消息
-    log_data = {**base_info, **message_dict}
-    
-    # 记录JSON格式的日志
-    logger.info(json.dumps(log_data))
+class BeijingFormatter(logging.Formatter):
+    """自定义日志格式化器，使用北京时间"""
+    def formatTime(self, record, datefmt=None):
+        utc_dt = datetime.fromtimestamp(record.created, pytz.UTC)
+        beijing_dt = utc_dt.astimezone(beijing_tz)
+        return beijing_dt.strftime(datefmt or '%Y-%m-%d %H:%M:%S')
+
+# 配置日志
+logger = logging.getLogger('app')
+logger.setLevel(logging.INFO)
+
+# 创建处理器并设置格式化器
+handler = logging.StreamHandler()
+handler.setFormatter(BeijingFormatter(
+    '%(asctime)s [%(levelname)s] %(message)s',
+    '%Y-%m-%d %H:%M:%S'
+))
+logger.addHandler(handler)
+
+# 确保 logger 有所有日志级别的方法
+def error(msg, *args, **kwargs):
+    logger.error(msg, *args, **kwargs)
+
+def info(msg, *args, **kwargs):
+    logger.info(msg, *args, **kwargs)
+
+def warning(msg, *args, **kwargs):
+    logger.warning(msg, *args, **kwargs)
+
+def debug(msg, *args, **kwargs):
+    logger.debug(msg, *args, **kwargs)
+
+def critical(msg, *args, **kwargs):
+    logger.critical(msg, *args, **kwargs)
+
+# API调用日志装饰器
+def log_api_call(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        info(f"API调用: {f.__name__}")
+        return f(*args, **kwargs)
+    return decorated_function

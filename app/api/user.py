@@ -1,69 +1,218 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from ..models.user import User
-from ..models.child import Child
+from ..models import User
 from ..extensions import db
+from ..utils.logger import log_api_call, logger
+from ..utils.error_codes import *
+import traceback
+from sqlalchemy.exc import SQLAlchemyError
 
 user_bp = Blueprint('user', __name__)
 
-@user_bp.route('/user', methods=['GET'])
+@user_bp.route('/api/user/profile', methods=['GET'])
 @jwt_required()
-def get_user():
-    """获取当前登录用户信息"""
-    user_id = get_jwt_identity()
-    user = User.query.get_or_404(user_id)
-    return jsonify(user.to_dict())
+@log_api_call
+def get_profile():
+    """获取用户信息
+    
+    返回数据:
+    {
+        "status": "success",
+        "data": {
+            "user": {
+                "id": 1,
+                "nickname": "张三",
+                "avatar_url": "http://...",
+                "created_at": "2024-01-07T12:00:00Z",
+                "last_login": "2024-01-07T12:00:00Z"
+            }
+        }
+    }
+    """
+    try:
+        user = User.query.get(g.user.id)
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'code': USER_NOT_FOUND,
+                'message': get_error_message(USER_NOT_FOUND)
+            }), 404
+            
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'user': user.to_dict()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取用户信息失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500
 
-@user_bp.route('/child', methods=['POST'])
+@user_bp.route('/api/user/profile', methods=['PUT'])
 @jwt_required()
-def create_child():
-    """创建孩子信息"""
-    user_id = get_jwt_identity()
-    data = request.get_json()
+@log_api_call
+def update_profile():
+    """更新用户信息
     
-    child = Child(
-        user_id=user_id,
-        nickname=data['nickname'],
-        school_province=data['school_province'],
-        school_city=data['school_city'],
-        grade=data['grade'],
-        semester=data['semester'],
-        textbook_version=data['textbook_version']
-    )
-    
-    db.session.add(child)
-    db.session.commit()
-    return jsonify(child.to_dict())
+    请求参数:
+    {
+        "nickname": "张三",     # 选填
+        "avatar_url": "http://..."  # 选填
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'code': INVALID_REQUEST_FORMAT,
+                'message': get_error_message(INVALID_REQUEST_FORMAT)
+            }), 400
+            
+        user = User.query.get(g.user.id)
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'code': USER_NOT_FOUND,
+                'message': get_error_message(USER_NOT_FOUND)
+            }), 404
+            
+        # 更新信息
+        for field in ['nickname', 'avatar_url']:
+            if field in data:
+                setattr(user, field, data[field])
+                
+        try:
+            db.session.commit()
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            logger.error(f"数据库错误: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'code': DATABASE_ERROR,
+                'message': get_error_message(DATABASE_ERROR)
+            }), 500
+            
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'user': user.to_dict()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"更新用户信息失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500
 
-@user_bp.route('/children', methods=['GET'])
+@user_bp.route('/api/user/settings', methods=['GET'])
 @jwt_required()
-def get_children():
-    """获取当��用户的所有孩子信息"""
-    user_id = get_jwt_identity()
-    children = Child.query.filter_by(user_id=user_id).all()
-    return jsonify([child.to_dict() for child in children])
+@log_api_call
+def get_settings():
+    """获取用户设置
+    
+    返回数据:
+    {
+        "status": "success",
+        "data": {
+            "settings": {
+                "notification_enabled": true,
+                "sound_enabled": true,
+                "theme": "light"
+            }
+        }
+    }
+    """
+    try:
+        user = User.query.get(g.user.id)
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'code': USER_NOT_FOUND,
+                'message': get_error_message(USER_NOT_FOUND)
+            }), 404
+            
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'settings': user.settings
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取用户设置失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500
 
-@user_bp.route('/child/<int:id>', methods=['PUT'])
+@user_bp.route('/api/user/settings', methods=['PUT'])
 @jwt_required()
-def update_child(id):
-    """更新孩子信息"""
-    user_id = get_jwt_identity()
-    child = Child.query.filter_by(id=id, user_id=user_id).first_or_404()
+@log_api_call
+def update_settings():
+    """更新用户设置
     
-    data = request.get_json()
-    for key, value in data.items():
-        setattr(child, key, value)
-    
-    db.session.commit()
-    return jsonify(child.to_dict())
-
-@user_bp.route('/child/<int:id>', methods=['DELETE'])
-@jwt_required()
-def delete_child(id):
-    """删除孩子信息"""
-    user_id = get_jwt_identity()
-    child = Child.query.filter_by(id=id, user_id=user_id).first_or_404()
-    
-    db.session.delete(child)
-    db.session.commit()
-    return '', 204 
+    请求参数:
+    {
+        "notification_enabled": true,  # 选填
+        "sound_enabled": true,         # 选填
+        "theme": "light"              # 选填
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({
+                'status': 'error',
+                'code': INVALID_REQUEST_FORMAT,
+                'message': get_error_message(INVALID_REQUEST_FORMAT)
+            }), 400
+            
+        user = User.query.get(g.user.id)
+        if not user:
+            return jsonify({
+                'status': 'error',
+                'code': USER_NOT_FOUND,
+                'message': get_error_message(USER_NOT_FOUND)
+            }), 404
+            
+        # 更新设置
+        settings = user.settings or {}
+        for key, value in data.items():
+            settings[key] = value
+        user.settings = settings
+        
+        try:
+            db.session.commit()
+        except SQLAlchemyError as e:
+            db.session.rollback()
+            logger.error(f"数据库错误: {str(e)}")
+            return jsonify({
+                'status': 'error',
+                'code': DATABASE_ERROR,
+                'message': get_error_message(DATABASE_ERROR)
+            }), 500
+            
+        return jsonify({
+            'status': 'success',
+            'data': {
+                'settings': user.settings
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"更新用户设置失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500 
