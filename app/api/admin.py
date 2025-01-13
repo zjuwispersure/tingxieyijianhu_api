@@ -1,5 +1,9 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func
+from datetime import datetime, timedelta
+
+from app.models.dictation_task import DictationTaskItem
 from ..models import User, Child, DictationTask, YuwenItem
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
@@ -10,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 admin_bp = Blueprint('admin', __name__)
 
-@admin_bp.route('/api/admin/users', methods=['GET'])
+@admin_bp.route('/admin/users/list', methods=['GET'])
 @jwt_required()
 @admin_required
 @log_api_call
@@ -92,7 +96,7 @@ def get_users():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@admin_bp.route('/api/admin/textbook/import', methods=['POST'])
+@admin_bp.route('/admin/textbook/import', methods=['POST'])
 @jwt_required()
 @admin_required
 @log_api_call
@@ -170,7 +174,7 @@ def import_textbook():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@admin_bp.route('/api/admin/stats/overview', methods=['GET'])
+@admin_bp.route('/admin/stats/overview', methods=['GET'])
 @jwt_required()
 @admin_required
 @log_api_call

@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
@@ -28,7 +28,7 @@ def generate_filename(file, prefix=''):
     timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
     return f"{prefix}_{timestamp}_{content_hash[:8]}{ext}"
 
-@upload_bp.route('/api/upload/image', methods=['POST'])
+@upload_bp.route('/upload/image', methods=['POST'])
 @jwt_required()
 @log_api_call
 def upload_image():

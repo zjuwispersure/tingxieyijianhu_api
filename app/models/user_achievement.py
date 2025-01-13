@@ -1,7 +1,8 @@
+from .base import BaseModel
 from .database import db
 from datetime import datetime
 
-class UserAchievement(db.Model):
+class UserAchievement(BaseModel):
     """用户成就模型"""
     __tablename__ = 'user_achievements'
 

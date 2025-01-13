@@ -1,16 +1,16 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required,get_jwt_identity
 from ..models import Child, DictationTask, DictationTaskItem, YuwenItem
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
 import traceback
-from sqlalchemy import func
+from sqlalchemy import func, Integer
 from datetime import datetime, timedelta
 
 review_bp = Blueprint('review', __name__)
 
-@review_bp.route('/api/review/words', methods=['GET'])
+@review_bp.route('/review/words', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_review_words():
@@ -38,6 +38,8 @@ def get_review_words():
     }
     """
     try:
+        user_id = get_jwt_identity()
+        
         child_id = request.args.get('child_id', type=int)
         days = request.args.get('days', 7, type=int)
         
@@ -51,7 +53,7 @@ def get_review_words():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:
@@ -127,7 +129,7 @@ def get_review_words():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@review_bp.route('/api/review/stats', methods=['GET'])
+@review_bp.route('/review/stats', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_review_stats():
@@ -167,7 +169,7 @@ def get_review_stats():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not child:

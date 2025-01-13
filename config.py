@@ -5,23 +5,27 @@ class Config:
     """基础配置类"""
     
     # 基本配置
-    SECRET_KEY = 'your-secret-key'
+    SECRET_KEY = os.getenv('SECRET_KEY', 'dev-secret-key')
     TESTING = False
-    DEBUG = False
+    DEBUG = True
     
     # 数据库配置
-    SQLALCHEMY_DATABASE_URI = 'mysql+pymysql://yuwen:sql2024@mysql:3306/yuwen'
+    SQLALCHEMY_DATABASE_URI = os.getenv('SQLALCHEMY_DATABASE_URI', 'sqlite:///app.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ECHO = False
     
     # JWT配置
-    JWT_SECRET_KEY = 'your-jwt-secret-key'
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(days=30)
+    JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', 'dev-secret-key')
+    JWT_TOKEN_LOCATION = ['headers']
+    JWT_HEADER_NAME = 'Authorization'
+    JWT_HEADER_TYPE = 'Bearer'
+    JWT_ACCESS_TOKEN_EXPIRES = 24 * 60 * 60  # 24小时
     JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=90)
+    JWT_ERROR_MESSAGE_KEY = 'message'
     
     # 微信小程序配置
-    WX_APP_ID = 'your-wx-app-id'
-    WX_APP_SECRET = 'your-wx-app-secret'
+    WX_APP_ID = 'wx3e6bb70a5abcc7e6'
+    WX_APP_SECRET = 'a2299eb5bbb13f5752ea51397d561acf'
     
     # 日志配置
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
@@ -46,6 +50,20 @@ class Config:
     UPLOAD_FOLDER = 'uploads'
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp3', 'wav'}
+    
+    # Redis配置
+    REDIS_URL = 'redis://redis:6379/0'
+    CACHE_TIMEOUT = 300  # 缓存超时时间(秒)
+    
+    # 缓存键前缀
+    CACHE_KEY_PREFIX = {
+        'stats': 'stats',
+        'task': 'task',
+        'session': 'session',
+        'word': 'word'
+    }
+    
+    PRINT_ROUTES = os.getenv('PRINT_ROUTES', 'False').lower() == 'true'
 
 class DevelopmentConfig(Config):
     """开发环境配置"""
@@ -54,9 +72,6 @@ class DevelopmentConfig(Config):
     SQLALCHEMY_ECHO = True
     LOG_LEVEL = 'DEBUG'
     
-    # 开发环境特定配置
-    WX_APP_ID = 'dev-app-id'
-    WX_APP_SECRET = 'dev-app-secret'
 
 class TestingConfig(Config):
     """测试环境配置"""
@@ -64,9 +79,6 @@ class TestingConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     
-    # 测试环境特定配置
-    WX_APP_ID = 'test-app-id'
-    WX_APP_SECRET = 'test-app-secret'
 
 class ProductionConfig(Config):
     """生产环境配置"""

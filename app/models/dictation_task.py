@@ -1,9 +1,10 @@
+from .base import BaseModel
 from .database import db
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 
-class DictationTask(db.Model):
+class DictationTask(BaseModel):
     """听写任务"""
     __tablename__ = 'dictation_tasks'
     
@@ -13,14 +14,13 @@ class DictationTask(db.Model):
     subject = Column(String(20), nullable=False)  # yuwen/english
     source = Column(String(20), nullable=False)   # unit/smart
     words_count = Column(Integer, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
     
     # 关联的听写内容
     items = relationship("DictationTaskItem", back_populates="task")
     sessions = relationship("DictationSession", back_populates="task")
     child = relationship("Child", back_populates="dictation_tasks")
 
-class DictationTaskItem(db.Model):
+class DictationTaskItem(BaseModel):
     """听写任务内容项"""
     __tablename__ = 'dictation_task_items'
     
@@ -31,9 +31,20 @@ class DictationTaskItem(db.Model):
     answer = Column(String(50))
     
     task = relationship("DictationTask", back_populates="items")
-    yuwen_item = relationship("YuwenItem") 
+    yuwen_item = db.relationship('YuwenItem')
 
-class DictationSession(db.Model):
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'task_id': self.task_id,
+            'yuwen_item_id': self.yuwen_item_id,
+            'is_correct': self.is_correct,
+            'answer': self.answer,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class DictationSession(BaseModel):
     """听写会话记录"""
     __tablename__ = 'dictation_sessions'
     

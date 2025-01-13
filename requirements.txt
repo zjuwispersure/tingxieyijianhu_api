@@ -20,3 +20,12 @@ pytz==2024.1
 pytest==7.3.1
 pytest-flask==1.2.0
 pytest-cov==4.1.0
+
+flask
+flask-sqlalchemy
+flask-migrate
+flask-jwt-extended
+gunicorn
+pymysql
+cryptography
+redis==4.5.1

@@ -4,12 +4,12 @@ from app.models.child import Child
 
 def test_get_user_without_token(client):
     """测试未认证的用户信息请求"""
-    response = client.get('/api/user')
+    response = client.get('/user')
     assert response.status_code == 401
 
 def test_get_user(client, auth_token):
     """测试获取用户信息"""
-    response = client.get('/api/user', headers={'Authorization': f'Bearer {auth_token}'})
+    response = client.get('/user', headers={'Authorization': f'Bearer {auth_token}'})
     assert response.status_code == 200
     assert 'id' in response.json
 
@@ -25,7 +25,7 @@ def test_create_child(client, auth_token):
     }
     
     response = client.post(
-        '/api/child',
+        '/child',
         json=child_data,
         headers={'Authorization': f'Bearer {auth_token}'}
     )

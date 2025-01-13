@@ -1,5 +1,5 @@
-from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask import Blueprint, request, jsonify
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import Notification
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
@@ -9,7 +9,7 @@ from datetime import datetime
 
 notification_bp = Blueprint('notification', __name__)
 
-@notification_bp.route('/api/notifications', methods=['GET'])
+@notification_bp.route('/notifications/list', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_notifications():
@@ -40,12 +40,19 @@ def get_notifications():
     }
     """
     try:
+        user_id = get_jwt_identity()
+        
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
         unread_only = request.args.get('unread_only', type=bool)
         
         # 构建查询
-        query = Notification.query.filter_by(user_id=g.user.id)
+        query = Notification.query.filter_by(
+            user_id=int(user_id)
+        )
+        query = Notification.query.filter_by(
+            user_id=int(user_id)
+        )
         if unread_only:
             query = query.filter_by(is_read=False)
             
@@ -56,10 +63,10 @@ def get_notifications():
             page=page,
             per_page=per_page
         )
-        
+        user_id=int(user_id),
         # 获取未读数量
         unread_count = Notification.query.filter_by(
-            user_id=g.user.id,
+            user_id=int(user_id),
             is_read=False
         ).count()
         
@@ -82,7 +89,7 @@ def get_notifications():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@notification_bp.route('/api/notifications/read', methods=['POST'])
+@notification_bp.route('/notifications/read', methods=['POST'])
 @jwt_required()
 @log_api_call
 def mark_as_read():
@@ -104,9 +111,10 @@ def mark_as_read():
             
         notification_ids = data.get('notification_ids', [])
         
+        user_id = int(get_jwt_identity())
         # 构建更新查询
         query = Notification.query.filter_by(
-            user_id=g.user.id,
+            user_id=user_id,
             is_read=False
         )
         

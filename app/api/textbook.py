@@ -1,15 +1,15 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import Child, YuwenItem, DictationTaskItem, DictationTask
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
 import traceback
-from sqlalchemy import func, case
+from sqlalchemy import func, Integer, case
 
 textbook_bp = Blueprint('textbook', __name__)
 
-@textbook_bp.route('/api/textbook/units', methods=['GET'])
+@textbook_bp.route('/textbook/units', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_units():
@@ -34,6 +34,8 @@ def get_units():
     }
     """
     try:
+        user_id = get_jwt_identity()
+        
         child_id = request.args.get('child_id', type=int)
         item_type = request.args.get('type', '识字')
         
@@ -47,7 +49,7 @@ def get_units():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:
@@ -120,7 +122,7 @@ def get_units():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@textbook_bp.route('/api/textbook/words', methods=['GET'])
+@textbook_bp.route('/textbook/words', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_words():
@@ -163,7 +165,7 @@ def get_words():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not child:

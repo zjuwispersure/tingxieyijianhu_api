@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required,get_jwt_identity
 from ..models import Child, Achievement, UserAchievement
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
@@ -8,7 +8,7 @@ import traceback
 
 achievement_bp = Blueprint('achievement', __name__)
 
-@achievement_bp.route('/api/achievements', methods=['GET'])
+@achievement_bp.route('/achievement/list', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_achievements():
@@ -42,11 +42,12 @@ def get_achievements():
                 'code': MISSING_REQUIRED_PARAM,
                 'message': get_error_message(MISSING_REQUIRED_PARAM, 'child_id')
             }), 400
-            
+
+        user_id = get_jwt_identity() 
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:

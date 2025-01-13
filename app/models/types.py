@@ -1,8 +1,9 @@
+from app.models.base import BaseModel
 from .database import db
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 
-class CharacterListType(db.Model):
+class CharacterListType(BaseModel):
     __tablename__ = 'character_list_types'
     
     id = Column(Integer, primary_key=True)

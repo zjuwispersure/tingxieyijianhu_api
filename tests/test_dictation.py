@@ -13,7 +13,7 @@ def test_start_dictation(client, auth_token, test_child):
     }
     
     response = client.post(
-        '/api/dictation',
+        '/dictation',
         json=dictation_data,
         headers={'Authorization': f'Bearer {auth_token}'}
     )
@@ -31,7 +31,7 @@ def test_submit_result(client, auth_token, test_dictation):
     }
     
     response = client.post(
-        f'/api/dictation/{test_dictation.id}/result',
+        f'/dictation/{test_dictation.id}/result',
         json=result_data,
         headers={'Authorization': f'Bearer {auth_token}'}
     )

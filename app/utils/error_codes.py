@@ -21,6 +21,7 @@ INVALID_TOKEN = 2002         # token无效
 PERMISSION_DENIED = 2003     # 权限不足
 LOGIN_FAILED = 2004          # 登录失败
 INVALID_WX_CODE = 2005       # 无效的微信登录码
+USER_NOT_FOUND = 2004  # 用户不存在
 
 
 # 资源错误 (3xxx)
@@ -69,7 +70,8 @@ ERROR_MESSAGES = {
     DATABASE_ERROR: '数据库错误',
     EXTERNAL_SERVICE_ERROR: '外部服务错误',
     WX_API_ERROR: '微信接口错误: {}',
-    INVALID_WX_CODE: '无效的微信登录码'
+    INVALID_WX_CODE: '无效的微信登录码',
+    USER_NOT_FOUND: '用户不存在'
 }
 
 def get_error_message(code, *args):

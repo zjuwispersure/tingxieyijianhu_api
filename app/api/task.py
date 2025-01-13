@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import Child, DictationTask, DictationTaskItem, DictationSession
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
@@ -10,7 +10,7 @@ from datetime import datetime
 
 task_bp = Blueprint('task', __name__)
 
-@task_bp.route('/api/task/list', methods=['GET'])
+@task_bp.route('/task/list', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_task_list():
@@ -40,6 +40,8 @@ def get_task_list():
     }
     """
     try:
+        user_id = get_jwt_identity()
+        
         child_id = request.args.get('child_id', type=int)
         page = request.args.get('page', 1, type=int)
         per_page = request.args.get('per_page', 20, type=int)
@@ -54,7 +56,7 @@ def get_task_list():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:
@@ -92,7 +94,7 @@ def get_task_list():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@task_bp.route('/api/task/<int:task_id>/detail', methods=['GET'])
+@task_bp.route('/task/<int:task_id>/detail', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_task_detail(task_id):
@@ -120,7 +122,7 @@ def get_task_detail(task_id):
         # 验证任务所有权
         task = DictationTask.query.filter_by(
             id=task_id,
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not task:
@@ -145,7 +147,7 @@ def get_task_detail(task_id):
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@task_bp.route('/api/task/<int:task_id>/submit', methods=['POST'])
+@task_bp.route('/task/<int:task_id>/submit', methods=['POST'])
 @jwt_required()
 @log_api_call
 def submit_task(task_id):
@@ -172,7 +174,7 @@ def submit_task(task_id):
         # 验证任务所有权
         task = DictationTask.query.filter_by(
             id=task_id,
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not task:
@@ -223,7 +225,7 @@ def submit_task(task_id):
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@task_bp.route('/api/task/session/start', methods=['POST'])
+@task_bp.route('/task/session/start', methods=['POST'])
 @jwt_required()
 @log_api_call
 def start_session():
@@ -260,7 +262,7 @@ def start_session():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=data['child_id'],
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not child:
@@ -330,7 +332,7 @@ def start_session():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@task_bp.route('/api/task/session/<int:session_id>/submit', methods=['POST'])
+@task_bp.route('/task/session/<int:session_id>/submit', methods=['POST'])
 @jwt_required()
 @log_api_call
 def submit_session():
@@ -386,7 +388,7 @@ def submit_session():
             
         # 验证任务所有权
         task = session.task
-        if task.child.user_id != g.user.id:
+        if task.child.user_id != int(get_jwt_identity()):
             return jsonify({
                 'status': 'error',
                 'code': PERMISSION_DENIED,

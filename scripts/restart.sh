@@ -19,7 +19,9 @@ fi
 
 # 启动服务
 echo "Starting services..."
-docker-compose up -d
+docker-compose up -d mysql
+docker-compose up -d redis
+docker-compose up -d yuwen
 
 # 等待 MySQL 服务就绪
 echo "Waiting for MySQL to be ready..."

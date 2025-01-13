@@ -1,18 +1,20 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required,get_jwt_identity
 from ..models import Child, DictationTask, DictationTaskItem, YuwenItem
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
 import traceback
-from sqlalchemy import func, case
+from sqlalchemy import func, Integer,case
 from datetime import datetime, timedelta
+from ..utils.cache import cache
 
 stats_bp = Blueprint('stats', __name__)
 
-@stats_bp.route('/api/stats/overview', methods=['GET'])
+@stats_bp.route('/stats/overview', methods=['GET'])
 @jwt_required()
 @log_api_call
+@cache.key_prefix('stats:overview')
 def get_overview():
     """获取听写统计概览
     
@@ -44,6 +46,8 @@ def get_overview():
     }
     """
     try:
+        user_id = get_jwt_identity()
+        
         child_id = request.args.get('child_id', type=int)
         days = request.args.get('days', 7, type=int)
         
@@ -57,7 +61,7 @@ def get_overview():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:
@@ -157,7 +161,7 @@ def get_overview():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@stats_bp.route('/api/stats/words', methods=['GET'])
+@stats_bp.route('/stats/words', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_word_stats():
@@ -206,7 +210,7 @@ def get_word_stats():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not child:
@@ -275,3 +279,10 @@ def get_word_stats():
             'code': INTERNAL_ERROR,
             'message': get_error_message(INTERNAL_ERROR)
         }), 500 
+
+@stats_bp.route('/stats/word-details')
+@jwt_required()
+@cache.key_prefix('stats:word')
+def get_word_details():
+    """获取词语详细统计"""
+    # ... 现有代码 ... 

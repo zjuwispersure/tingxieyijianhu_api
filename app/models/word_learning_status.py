@@ -1,7 +1,8 @@
+from app.models.base import BaseModel
 from .database import db
 from datetime import datetime
 
-class WordLearningStatus(db.Model):
+class WordLearningStatus(BaseModel):
     """词语学习状态模型 - 存储学生的学习状态"""
     __tablename__ = 'word_learning_status'
     
@@ -16,9 +17,6 @@ class WordLearningStatus(db.Model):
     next_review = db.Column(db.DateTime)  # 下次复习时间
     is_mastered = db.Column(db.Boolean, default=False)  # 是否已掌握
     
-    # 时间戳
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
     
     # 索引
     __table_args__ = (

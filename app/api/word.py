@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import Child, YuwenItem, WordLearningStatus
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 word_bp = Blueprint('word', __name__)
 
-@word_bp.route('/api/word/status', methods=['GET'])
+@word_bp.route('/word/status', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_word_status():
@@ -40,6 +40,8 @@ def get_word_status():
     }
     """
     try:
+        user_id = get_jwt_identity()
+        
         child_id = request.args.get('child_id', type=int)
         word = request.args.get('word')
         
@@ -53,7 +55,7 @@ def get_word_status():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:
@@ -104,7 +106,7 @@ def get_word_status():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@word_bp.route('/api/word/status', methods=['PUT'])
+@word_bp.route('/word/status', methods=['PUT'])
 @jwt_required()
 @log_api_call
 def update_word_status():
@@ -130,7 +132,7 @@ def update_word_status():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=data['child_id'],
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not child:

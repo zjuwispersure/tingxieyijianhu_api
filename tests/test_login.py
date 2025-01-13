@@ -3,7 +3,7 @@ import json
 
 def test_login():
     # 测试登录接口
-    url = 'http://localhost:5000/api/login'
+    url = 'http://localhost:5000/login'
     data = {
         'code': 'test_code'
     }
@@ -19,7 +19,7 @@ def test_login():
         # 测试获取用户信息
         headers = {'Authorization': f'Bearer {token}'}
         user_info = requests.get(
-            'http://localhost:5000/api/user/info',
+            'http://localhost:5000/user/info',
             headers=headers
         )
         print('\nUser Info:', json.dumps(user_info.json(), indent=2))
@@ -29,7 +29,7 @@ def test_login_same_user():
     client = app.test_client()
     
     # 第一次登录
-    response1 = client.post('/api/login', json={
+    response1 = client.post('/login', json={
         'code': 'test_code_1',
         'userInfo': {
             'nickName': 'Test User',
@@ -41,7 +41,7 @@ def test_login_same_user():
     user_id1 = data1['data']['user']['id']
     
     # 第二次登录（使用相同的 code）
-    response2 = client.post('/api/login', json={
+    response2 = client.post('/login', json={
         'code': 'test_code_1',
         'userInfo': {
             'nickName': 'Test User Updated',

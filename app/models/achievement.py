@@ -1,26 +1,28 @@
+from .base import BaseModel
 from .database import db
 from datetime import datetime
 
-class Achievement(db.Model):
+class Achievement(BaseModel):
     """成就模型"""
     __tablename__ = 'achievements'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False)  # 成就名称
-    description = db.Column(db.String(200))  # 成就描述
-    type = db.Column(db.String(20), nullable=False)  # 成就类型
-    condition = db.Column(db.String(200))  # 解锁条件
-    reward = db.Column(db.Integer, default=0)  # 奖励积分
+    child_id = db.Column(db.Integer, db.ForeignKey('children.id'), nullable=False)  # 添加孩子ID
+    name = db.Column(db.String(32), nullable=False)
+    description = db.Column(db.String(128))
+    icon = db.Column(db.String(128))
+    condition = db.Column(db.String(256))  # 达成条件
     
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, onupdate=datetime.utcnow)
-
+    # 关联关系
+    child = db.relationship('Child', backref='achievements')
+    
     def to_dict(self):
         return {
             'id': self.id,
+            'child_id': self.child_id,
             'name': self.name,
             'description': self.description,
-            'type': self.type,
+            'icon': self.icon,
             'condition': self.condition,
-            'reward': self.reward
+            'created_at': self.created_at.isoformat() if self.created_at else None
         } 

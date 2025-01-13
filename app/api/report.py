@@ -1,16 +1,16 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required,get_jwt_identity
 from ..models import Child, DictationTask, DictationTaskItem, YuwenItem
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
 import traceback
-from sqlalchemy import func, case
+from sqlalchemy import func, case, Integer
 from datetime import datetime, timedelta
 
 report_bp = Blueprint('report', __name__)
 
-@report_bp.route('/api/report/daily', methods=['GET'])
+@report_bp.route('/report/daily', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_daily_report():
@@ -43,6 +43,8 @@ def get_daily_report():
     }
     """
     try:
+        user_id = get_jwt_identity()
+        
         child_id = request.args.get('child_id', type=int)
         date_str = request.args.get('date')
         
@@ -56,7 +58,7 @@ def get_daily_report():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:

@@ -1,21 +1,20 @@
+from datetime import datetime
+from .base import BaseModel
 from .database import db
-from sqlalchemy import Column, Integer, ForeignKey, Boolean
-from sqlalchemy.orm import relationship
 
-class DictationConfig(db.Model):
+class DictationConfig(BaseModel):
     """听写配置"""
     __tablename__ = 'dictation_configs'
     
-    id = Column(Integer, primary_key=True)
-    child_id = Column(Integer, ForeignKey('children.id'), nullable=False)
-    words_per_dictation = Column(Integer, default=10)  # 每次听写词数
-    review_days = Column(Integer, default=3)           # 复习间隔天数
-    dictation_interval = Column(Integer, default=5)    # 听写间隔秒数
-    dictation_ratio = Column(Integer, default=100)     # 听写比例(百分比)
-    wrong_words_only = Column(Boolean, default=False)  # 是否只听写错词
-    
+    id = db.Column(db.Integer, primary_key=True)
+    child_id = db.Column(db.Integer, db.ForeignKey('children.id'), nullable=False)
+    words_per_dictation = db.Column(db.Integer, default=10)  # 每次听写词数
+    review_days = db.Column(db.Integer, default=3)           # 复习间隔天数
+    dictation_interval = db.Column(db.Integer, default=5)    # 听写间隔秒数
+    dictation_ratio = db.Column(db.Integer, default=100)     # 听写比例(百分比)
+
     # 关联关系
-    child = relationship("Child", back_populates="dictation_config")
+    child = db.relationship('Child', back_populates='dictation_config', uselist=False)
     
     def to_dict(self):
         return {
@@ -25,5 +24,6 @@ class DictationConfig(db.Model):
             'review_days': self.review_days,
             'dictation_interval': self.dictation_interval,
             'dictation_ratio': self.dictation_ratio,
-            'wrong_words_only': self.wrong_words_only
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
         } 

@@ -1,17 +1,17 @@
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required
-from ..utils.wx_service import get_openid
-from ..models import User
-from ..extensions import db
-from ..utils.logger import log_api_call
-from ..utils.error_codes import *
+
+from ...models.family import Family, UserFamilyRelation
+from ...models.user import User
+from ...utils.error_codes import INVALID_WX_CODE, MISSING_REQUIRED_PARAM, INTERNAL_ERROR, get_error_message
 import traceback
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timedelta
-
-from app.utils import logger
-
-auth_bp = Blueprint('auth', __name__)
+from ...extensions import db
+from ...utils.logger import logger
+from ...utils.decorators import log_api_call
+from ...utils.wx_service import get_openid
+from . import auth_bp
 
 @auth_bp.route('/auth/login', methods=['POST'])
 @log_api_call
@@ -29,10 +29,6 @@ def login():
         "data": {
             "access_token": "xxx",
             "refresh_token": "xxx",
-            "user": {
-                "id": 1,
-                "nickname": "xxx"
-            }
         }
     }
     """
@@ -48,12 +44,11 @@ def login():
         code = data['code']
         
         # 测试模式
-        if code == 'test_code':
-            user = User.query.first()
-            if not user:
-                user = User(openid='test_openid')
-                db.session.add(user)
-                db.session.commit()
+        if code.startswith('test_code'):
+            # 从 test_code_1, test_code_2 等提取用户编号
+            test_user_num = code.split('_')[-1] if '_' in code else '1'
+            test_openid = f'test_openid_{test_user_num}'
+            openid = test_openid            
         else:
             # 获取openid
             openid = get_openid(code)
@@ -64,23 +59,61 @@ def login():
                     'message': get_error_message(INVALID_WX_CODE)
                 }), 400
                 
-            # 获取或创建用户
-            user = User.query.filter_by(openid=openid).first()
-            if not user:
-                user = User(openid=openid)
-                db.session.add(user)
+        # 获取或创建用户
+        user = User.query.filter_by(openid=openid).first()
+        if not user:
+            # 创建新用户
+            user = User(openid=test_openid)
+            db.session.add(user)
+            db.session.commit()
+            
+        # 检查用户是否已有家庭关系
+        relation = UserFamilyRelation.query.filter_by(user_id=user.id).first()
+        if not relation:
+            # 检查是否已有同名家庭
+            family_name = f"{user.nickname or '我'}的家庭"
+            family = Family.query.filter_by(name=family_name, created_by=user.id).first()
+                
+            if not family:
+                # 创建新家庭
+                family = Family(
+                    name=family_name,
+                    created_by=user.id
+                )
+                db.session.add(family)
                 db.session.commit()
                 
-        # 生成token
-        access_token = create_access_token(identity=str(user.id))
-        refresh_token = create_refresh_token(identity=str(user.id))
+            # 创建用户-家庭关系
+            relation = UserFamilyRelation(
+                user_id=user.id,
+                family_id=family.id,
+                role='parent'  # 创建者为家长角色
+            )
+            db.session.add(relation)
+            db.session.commit()
+
+        # 获取用户的第一个家庭ID（如果有）
+        family_relation = UserFamilyRelation.query.filter_by(user_id=user.id).first()
+        family_id = family_relation.family_id if family_relation else None
+        is_admin = user.is_admin  # 使用用户表的 is_admin 字段
+        
+        # 创建包含 family_id 和 is_admin 的 token
+        access_token = create_access_token(
+            identity=str(user.id),
+            additional_claims={
+                'family_id': family_id,
+                'is_admin': is_admin
+            }
+        )
         
         return jsonify({
             'status': 'success',
+            'code': 0,
             'data': {
                 'access_token': access_token,
-                'refresh_token': refresh_token,
-                'user': user.to_dict()
+                'user_id': user.id,
+                'family_id': family_id,
+                'is_admin': is_admin
             }
         })
         
@@ -92,7 +125,7 @@ def login():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@auth_bp.route('/api/auth/refresh', methods=['POST'])
+@auth_bp.route('/auth/refresh', methods=['POST'])
 @jwt_required(refresh=True)
 @log_api_call
 def refresh_token():

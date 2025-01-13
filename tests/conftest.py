@@ -38,7 +38,7 @@ def auth_token(app, client):
         db.session.add(user)
         db.session.commit()
         
-        response = client.post('/api/login', json={'code': 'test_code'})
+        response = client.post('/login', json={'code': 'test_code'})
         return response.json['access_token']
 
 @pytest.fixture

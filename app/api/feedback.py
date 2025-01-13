@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
-from ..models import Feedback, FeedbackReply
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from ..models import Feedback
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
@@ -10,7 +10,7 @@ from datetime import datetime
 
 feedback_bp = Blueprint('feedback', __name__)
 
-@feedback_bp.route('/api/feedback', methods=['POST'])
+@feedback_bp.route('/feedback/create', methods=['POST'])
 @jwt_required()
 @log_api_call
 def create_feedback():
@@ -67,8 +67,9 @@ def create_feedback():
             }), 400
             
         # 创建反馈
+        user_id = get_jwt_identity()
         feedback = Feedback(
-            user_id=g.user.id,
+            user_id=int(user_id),
             type=data['type'],
             content=data['content'],
             contact=data.get('contact'),
@@ -102,7 +103,7 @@ def create_feedback():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@feedback_bp.route('/api/feedback/list', methods=['GET'])
+@feedback_bp.route('/feedback/list', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_feedback_list():
@@ -137,7 +138,7 @@ def get_feedback_list():
         status = request.args.get('status')
         
         # 构建查询
-        query = Feedback.query.filter_by(user_id=g.user.id)
+        query = Feedback.query.filter_by(user_id=int(get_jwt_identity()))
         
         if status:
             query = query.filter_by(status=status)
@@ -168,7 +169,7 @@ def get_feedback_list():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@feedback_bp.route('/api/feedback/<int:feedback_id>/detail', methods=['GET'])
+@feedback_bp.route('/feedback/<int:feedback_id>/detail', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_feedback_detail(feedback_id):
@@ -198,7 +199,7 @@ def get_feedback_detail(feedback_id):
         # 验证所有权
         feedback = Feedback.query.filter_by(
             id=feedback_id,
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not feedback:

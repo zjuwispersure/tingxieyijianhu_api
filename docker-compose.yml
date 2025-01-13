@@ -2,35 +2,109 @@ name: yuwen
 
 services:
   mysql:
-    image: mysql:5.7
+    image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: 123456
-      MYSQL_DATABASE: yuwen
+      MYSQL_ROOT_PASSWORD: yuwen123
+      MYSQL_DATABASE: dictation
       MYSQL_USER: yuwen
-      MYSQL_PASSWORD: sql2024
+      MYSQL_PASSWORD: yuwen123
       TZ: Asia/Shanghai
+    command: 
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+      - --default-time-zone=+8:00
+      - --bind-address=0.0.0.0
     ports:
       - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-    command: --default-authentication-plugin=mysql_native_password --default-time-zone='+8:00'
+    networks:
+      yuwen_net:
+        aliases:
+          - mysql.yuwen.net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
+      test: ["CMD", "mysql", "-h", "127.0.0.1", "-P", "3306", "-u", "yuwen", "-pyuwen123", "-e", "SELECT 1;"]
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 20
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  api:
+  yuwen:
     build: .
     ports:
       - "5000:5000"
     environment:
+      - FLASK_APP=wsgi.py
       - FLASK_ENV=development
-      - DATABASE_URL=mysql+pymysql://yuwen:sql2024@mysql:3306/yuwen
+      - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
+      - FLASK_DEBUG=1
+      - SQLALCHEMY_DATABASE_URI=mysql+pymysql://yuwen:yuwen123@mysql.yuwen.net:3306/dictation?charset=utf8mb4&connect_timeout=60
+      - REDIS_URL=redis://redis.yuwen.net:6379/0
+      - DATA_DIR=/app/data
       - TZ=Asia/Shanghai
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      yuwen_net:
+        aliases:
+          - yuwen.yuwen.net
+    command: >
+      bash -c "
+      sleep 10 &&
+      gunicorn
+      --bind 0.0.0.0:5000
+      --workers 4
+      --timeout 120
+      --reload
+      --access-logfile -
+      --error-logfile -
+      wsgi:app"
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:6.2
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      yuwen_net:
+        aliases:
+          - redis.yuwen.net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+networks:
+  yuwen_net:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
 
 volumes:
-  mysql_data: 
+  mysql_data:
+  redis_data: 

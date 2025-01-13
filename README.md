@@ -24,7 +24,7 @@
 ### 用户管理
 
 #### 微信登录
-- 接口：`POST /api/login`
+- 接口：`POST /login`
 - 功能：微信授权登录
 - 参数：  ```json
   {
@@ -36,7 +36,7 @@
   }  ```
 
 #### 获取用户信息
-- 接口：`GET /api/user`
+- 接口：`GET /user`
 - 功能：获取当前登录用户信息
 - 需要认证：是
 - 返回：  ```json
@@ -49,7 +49,7 @@
 ### 孩子管理
 
 #### 创建孩子信息
-- 接口：`POST /api/child`
+- 接口：`POST /child`
 - 功能：创建孩子信息
 - 需要认证：是
 - 参数：  ```json
@@ -63,24 +63,24 @@
   }  ```
 
 #### 获取孩子列表
-- 接口：`GET /api/children`
+- 接口：`GET /children`
 - 功能：获取当前用户的所有孩子信息
 - 需要认证：是
 
 #### 更新孩子信息
-- 接口：`PUT /api/child/:id`
+- 接口：`PUT /child/:id`
 - 功能：更新指定孩子信息
 - 需要认证：是
 
 #### 删除孩子信息
-- 接口：`DELETE /api/child/:id`
+- 接口：`DELETE /child/:id`
 - 功能：删除指定孩子信息
 - 需要认证：是
 
 ### 家庭群组
 
 #### 创建家庭群组
-- 接口：`POST /api/family`
+- 接口：`POST /family`
 - 功能：创建家庭群组
 - 需要认证：是
 - 参数：  ```json
@@ -89,7 +89,7 @@
   }  ```
 
 #### 邀请成员
-- 接口：`POST /api/family/invite`
+- 接口：`POST /family/invite`
 - 功能：邀请家庭成员
 - 需要认证：是
 - 参数：  ```json
@@ -98,14 +98,14 @@
   }  ```
 
 #### 获取成员列表
-- 接口：`GET /api/family/members`
+- 接口：`GET /family/members`
 - 功能：获取家庭成员列表
 - 需要认证：是
 
 ### 听写功能
 
 #### 创建单元听写任务
-- 接口：`POST /api/dictation/yuwen/by_unit`
+- 接口：`POST /dictation/yuwen/by_unit`
 - 功能：创建基于单元的听写任务
 - 需要认证：是
 - 参数：  ```json
@@ -122,7 +122,7 @@
   }  ```
 
 #### 创建智能听写任务
-- 接口：`POST /api/dictation/yuwen/smart`
+- 接口：`POST /dictation/yuwen/smart`
 - 功能：基于记忆曲线创建智能复习听写任务
 - 需要认证：是
 - 参数：  ```json
@@ -136,7 +136,7 @@
   }  ```
 
 #### 获取听写任务详情
-- 接口：`GET /api/dictation/tasks/<task_id>`
+- 接口：`GET /dictation/tasks/<task_id>`
 - 功能：获取听写任务信息和词语列表
 - 需要认证：是
 - 返回：  ```json
@@ -158,7 +158,7 @@
   }  ```
 
 #### 提交听写结果
-- 接口：`POST /api/dictation/sessions/<session_id>/submit`
+- 接口：`POST /dictation/sessions/<session_id>/submit`
 - 功能：提交单个词语的听写结果
 - 需要认证：是
 - 参数：  ```json
@@ -170,7 +170,7 @@
   }  ```
 
 #### 批改听写结果
-- 接口：`POST /api/dictation/details/<detail_id>/correct`
+- 接口：`POST /dictation/details/<detail_id>/correct`
 - 功能：批改听写结果
 - 需要认证：是
 - 参数：  ```json
@@ -180,7 +180,7 @@
   }  ```
 
 #### 开始听写
-- 接口：`POST /api/dictation`
+- 接口：`POST /dictation`
 - 功能：开始新的听写
 - 需要认证：是
 - 参数：  ```json
@@ -194,7 +194,7 @@
   }  ```
 
 #### 提交结果
-- 接口：`POST /api/dictation/:id/result`
+- 接口：`POST /dictation/:id/result`
 - 功能：提交听写结果
 - 需要认证：是
 - 参数：  ```json
@@ -208,7 +208,7 @@
   }  ```
 
 #### 获取统计
-- 接口：`GET /api/dictation/statistics/:id`
+- 接口：`GET /dictation/statistics/:id`
 - 功能：获取听写统计信息
 - 需要认证：是
 
@@ -240,3 +240,11 @@ chmod +x scripts/backup_db.sh
 crontab -e
 0 3 /path/to/project/scripts/backup_db.sh
 ```
+
+### 3. 生成音频
+
+generate_yuwen_audio.py用来生成语文教材音频
+
+### 4. 导入语文教材数据
+
+import_yuwen_data.py用来导入语文教材数据，生成音频，并导入到数据库

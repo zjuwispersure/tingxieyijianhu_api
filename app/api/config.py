@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required,get_jwt_identity
 from ..models import Child, DictationConfig
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
@@ -44,7 +44,7 @@ def get_dictation_config():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not child:
@@ -103,7 +103,7 @@ def update_dictation_config():
         # 验证孩子所有权
         child = Child.query.filter_by(
             id=data['child_id'],
-            user_id=g.user.id
+            user_id=int(get_jwt_identity())
         ).first()
         
         if not child:

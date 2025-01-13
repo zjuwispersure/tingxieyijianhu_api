@@ -1,16 +1,16 @@
 from flask import Blueprint, request, jsonify, g
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import Child, DictationTask, DictationTaskItem
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
 import traceback
-from sqlalchemy import func
+from sqlalchemy import func, Integer
 from datetime import datetime, timedelta
 
 ranking_bp = Blueprint('ranking', __name__)
 
-@ranking_bp.route('/api/ranking/daily', methods=['GET'])
+@ranking_bp.route('/ranking/daily', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_daily_ranking():
@@ -49,9 +49,10 @@ def get_daily_ranking():
             }), 400
             
         # 验证孩子所有权
+        user_id = get_jwt_identity()
         child = Child.query.filter_by(
             id=child_id,
-            user_id=g.user.id
+            user_id=int(user_id)
         ).first()
         
         if not child:

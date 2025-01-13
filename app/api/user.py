@@ -9,7 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 user_bp = Blueprint('user', __name__)
 
-@user_bp.route('/api/user/profile', methods=['GET'])
+@user_bp.route('/user/profile', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_profile():
@@ -30,7 +30,7 @@ def get_profile():
     }
     """
     try:
-        user = User.query.get(g.user.id)
+        user = User.query.get(int(get_jwt_identity()))
         if not user:
             return jsonify({
                 'status': 'error',
@@ -53,7 +53,7 @@ def get_profile():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@user_bp.route('/api/user/profile', methods=['PUT'])
+@user_bp.route('/user/profile', methods=['PUT'])
 @jwt_required()
 @log_api_call
 def update_profile():
@@ -74,7 +74,7 @@ def update_profile():
                 'message': get_error_message(INVALID_REQUEST_FORMAT)
             }), 400
             
-        user = User.query.get(g.user.id)
+        user = User.query.get(int(get_jwt_identity()))
         if not user:
             return jsonify({
                 'status': 'error',
@@ -113,7 +113,7 @@ def update_profile():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@user_bp.route('/api/user/settings', methods=['GET'])
+@user_bp.route('/user/settings', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_settings():
@@ -132,7 +132,7 @@ def get_settings():
     }
     """
     try:
-        user = User.query.get(g.user.id)
+        user = User.query.get(int(get_jwt_identity()))
         if not user:
             return jsonify({
                 'status': 'error',
@@ -155,7 +155,7 @@ def get_settings():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@user_bp.route('/api/user/settings', methods=['PUT'])
+@user_bp.route('/user/settings', methods=['PUT'])
 @jwt_required()
 @log_api_call
 def update_settings():
@@ -177,7 +177,7 @@ def update_settings():
                 'message': get_error_message(INVALID_REQUEST_FORMAT)
             }), 400
             
-        user = User.query.get(g.user.id)
+        user = User.query.get(int(get_jwt_identity()))
         if not user:
             return jsonify({
                 'status': 'error',
