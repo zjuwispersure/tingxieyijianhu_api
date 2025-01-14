@@ -1,15 +1,16 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required,get_jwt_identity
-from ..models import Child, DictationConfig
-from ..extensions import db
-from ..utils.logger import log_api_call, logger
-from ..utils.error_codes import *
+
+from app.utils.decorators import log_api_call
+from ...models import Child, DictationConfig
+from ...extensions import db
+from ...utils.logger import logger
+from ...utils.error_codes import *
 import traceback
 from sqlalchemy.exc import SQLAlchemyError
+from . import dictation_config_bp
 
-config_bp = Blueprint('config', __name__)
-
-@config_bp.route('/config/dictation/get', methods=['GET'])
+@dictation_config_bp.route('/config/dictation/get', methods=['GET'])
 @jwt_required()
 @log_api_call
 def get_dictation_config():
@@ -75,7 +76,7 @@ def get_dictation_config():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@config_bp.route('/config/dictation/update', methods=['PUT'])
+@dictation_config_bp.route('/dictation/config/update', methods=['POST'])
 @jwt_required()
 @log_api_call
 def update_dictation_config():
@@ -92,61 +93,42 @@ def update_dictation_config():
     }
     """
     try:
+        # 开启事务
+        db.session.begin_nested()
+        
         data = request.get_json()
-        if not data or 'child_id' not in data:
-            return jsonify({
-                'status': 'error',
-                'code': MISSING_REQUIRED_PARAM,
-                'message': get_error_message(MISSING_REQUIRED_PARAM, 'child_id')
-            }), 400
-            
-        # 验证孩子所有权
-        child = Child.query.filter_by(
-            id=data['child_id'],
-            user_id=int(get_jwt_identity())
-        ).first()
+        child_id = data.get('child_id')
         
-        if not child:
-            return jsonify({
-                'status': 'error',
-                'code': CHILD_NOT_FOUND,
-                'message': get_error_message(CHILD_NOT_FOUND)
-            }), 404
-            
-        config = child.dictation_config
+        config = DictationConfig.query.filter_by(child_id=child_id).first()
         if not config:
-            config = DictationConfig(child=child)
-            db.session.add(config)
+            config = DictationConfig(child_id=child_id)
             
-        # 更新配置
-        for field in [
-            'words_per_dictation',
-            'review_days',
-            'dictation_interval',
-            'dictation_ratio',
-            'wrong_words_only'
-        ]:
-            if field in data:
-                setattr(config, field, data[field])
-                
         try:
-            db.session.commit()
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            logger.error(f"数据库错误: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'code': DATABASE_ERROR,
-                'message': get_error_message(DATABASE_ERROR)
-            }), 500
+            # 更新配置
+            for field in [
+                'words_per_dictation',
+                'review_days',
+                'dictation_interval',
+                'dictation_ratio',
+                'wrong_words_only'
+            ]:
+                if field in data:
+                    setattr(config, field, data[field])
             
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'config': config.to_dict()
-            }
-        })
-        
+            db.session.add(config)
+            db.session.flush()
+            
+            # 提交事务
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'message': '配置更新成功'
+            })
+        except Exception as e:
+            db.session.rollback()
+            raise e
+            
     except Exception as e:
         logger.error(f"更新听写配置失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({

@@ -7,52 +7,6 @@ from .logger import logger
 import traceback
 from ..models.family import UserFamilyRelation
 
-def admin_required(f):
-    """管理员权限验证装饰器
-    
-    验证用户是否具有管理员权限
-    
-    错误返回:
-    {
-        "status": "error",
-        "code": 2003,         # PERMISSION_DENIED
-        "message": "没有权限执行此操作"
-    }
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        try:
-            verify_jwt_in_request()
-            user_id = get_jwt_identity()
-            user = User.query.get(int(user_id))
-            
-            if not user:
-                return jsonify({
-                    'status': 'error',
-                    'code': UNAUTHORIZED,
-                    'message': get_error_message(UNAUTHORIZED)
-                }), 401
-                
-            if not user.is_admin:
-                return jsonify({
-                    'status': 'error',
-                    'code': PERMISSION_DENIED,
-                    'message': get_error_message(PERMISSION_DENIED)
-                }), 403
-                
-            g.user = user
-            return f(*args, **kwargs)
-            
-        except Exception as e:
-            logger.error(f"权限验证失败: {str(e)}\n{traceback.format_exc()}")
-            return jsonify({
-                'status': 'error',
-                'code': PERMISSION_DENIED,
-                'message': get_error_message(PERMISSION_DENIED)
-            }), 403
-            
-    return decorated_function
-
 def api_key_required(f):
     """API密钥验证装饰器
     

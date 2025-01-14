@@ -4,11 +4,11 @@ from sqlalchemy import func
 from datetime import datetime, timedelta
 
 from app.models.dictation_task import DictationTaskItem
+from app.utils.decorators import admin_required, log_api_call
 from ..models import User, Child, DictationTask, YuwenItem
 from ..extensions import db
-from ..utils.logger import log_api_call, logger
+from ..utils.logger import logger
 from ..utils.error_codes import *
-from ..utils.admin import admin_required
 import traceback
 from sqlalchemy.exc import SQLAlchemyError
 

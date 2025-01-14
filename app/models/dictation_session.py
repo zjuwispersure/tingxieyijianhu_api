@@ -3,24 +3,25 @@ from .base import BaseModel
 from .database import db
 
 class DictationSession(BaseModel):
-    """听写会话表 - 记录每次听写的基本信息"""
+    """听写会话"""
     __tablename__ = 'dictation_sessions'
+    __table_args__ = {'extend_existing': True}
     
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey('dictation_tasks.id'), nullable=False)
+    status = db.Column(db.String(20), default='pending')  # pending, completed
+    total_words = db.Column(db.Integer, default=0)
+    correct_count = db.Column(db.Integer, default=0)
     start_time = db.Column(db.DateTime, default=datetime.utcnow)
     end_time = db.Column(db.DateTime)
-    status = db.Column(db.String(32), default='ongoing')  # ongoing/completed/interrupted
     
     # 统计信息
-    total_words = db.Column(db.Integer)
-    correct_count = db.Column(db.Integer, default=0)
     accuracy_rate = db.Column(db.Float)
     time_spent = db.Column(db.Integer)  # 总用时(秒)
     
     # 关系
-    task = db.relationship('DictationTask', back_populates='sessions')
-    details = db.relationship('DictationDetail', back_populates='session', cascade='all, delete-orphan')
+    task = db.relationship('app.models.dictation_task.DictationTask', back_populates='sessions')
+    details = db.relationship('app.models.dictation_session.DictationDetail', back_populates='session', cascade='all, delete-orphan')
 
     def calculate_stats(self):
         """计算听写统计信息"""
@@ -46,5 +47,5 @@ class DictationDetail(BaseModel):
     retry_count = db.Column(db.Integer, default=0)
     
     # 关系
-    session = db.relationship('DictationSession', back_populates='details')
-    task_item = db.relationship('DictationTaskItem', back_populates='details') 
+    session = db.relationship('app.models.dictation_session.DictationSession', back_populates='details')
+    task_item = db.relationship('app.models.dictation_task.DictationTaskItem', back_populates='details') 

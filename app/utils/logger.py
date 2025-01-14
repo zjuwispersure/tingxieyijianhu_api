@@ -20,7 +20,7 @@ logger.setLevel(logging.INFO)
 # 创建处理器并设置格式化器
 handler = logging.StreamHandler()
 handler.setFormatter(BeijingFormatter(
-    '%(asctime)s [%(levelname)s] %(message)s',
+    '%(asctime)s [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s',
     '%Y-%m-%d %H:%M:%S'
 ))
 logger.addHandler(handler)
@@ -40,11 +40,3 @@ def debug(msg, *args, **kwargs):
 
 def critical(msg, *args, **kwargs):
     logger.critical(msg, *args, **kwargs)
-
-# API调用日志装饰器
-def log_api_call(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        info(f"API调用: {f.__name__}")
-        return f(*args, **kwargs)
-    return decorated_function

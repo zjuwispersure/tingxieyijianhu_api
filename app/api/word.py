@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from app.utils.decorators import log_api_call
 from ..models import Child, YuwenItem, WordLearningStatus
 from ..extensions import db
-from ..utils.logger import log_api_call, logger
+from ..utils.logger import logger
 from ..utils.error_codes import *
 import traceback
 from sqlalchemy.exc import SQLAlchemyError
@@ -106,78 +108,64 @@ def get_word_status():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@word_bp.route('/word/status', methods=['PUT'])
+@word_bp.route('/word/status/update', methods=['POST'])
 @jwt_required()
 @log_api_call
 def update_word_status():
-    """更新词语学习状态
-    
-    请求参数:
-    {
-        "child_id": 1,
-        "word": "你好",
-        "learning_stage": 2,
-        "next_review": "2024-01-10T12:00:00Z"
-    }
-    """
+    """更新词语学习状态"""
     try:
+        # 开启事务
+        db.session.begin_nested()
         data = request.get_json()
-        if not data or 'child_id' not in data or 'word' not in data:
-            return jsonify({
-                'status': 'error',
-                'code': MISSING_REQUIRED_PARAM,
-                'message': get_error_message(MISSING_REQUIRED_PARAM, 'child_id 和 word')
-            }), 400
-            
-        # 验证孩子所有权
-        child = Child.query.filter_by(
-            id=data['child_id'],
-            user_id=int(get_jwt_identity())
-        ).first()
         
-        if not child:
-            return jsonify({
-                'status': 'error',
-                'code': CHILD_NOT_FOUND,
-                'message': get_error_message(CHILD_NOT_FOUND)
-            }), 404
-            
-        # 获取或创建学习状态
-        status = WordLearningStatus.query.filter_by(
-            child_id=data['child_id'],
-            word=data['word']
-        ).first()
-        
-        if not status:
-            status = WordLearningStatus(
-                child_id=data['child_id'],
-                word=data['word']
-            )
-            db.session.add(status)
-            
-        # 更新状态
-        for field in ['learning_stage', 'next_review']:
-            if field in data:
-                setattr(status, field, data[field])
-                
         try:
-            db.session.commit()
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            logger.error(f"数据库错误: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'code': DATABASE_ERROR,
-                'message': get_error_message(DATABASE_ERROR)
-            }), 500
+            # 验证必要参数
+            if not all(k in data for k in ['child_id', 'word', 'yuwen_item_id']):
+                return jsonify({
+                    'status': 'error',
+                    'code': MISSING_REQUIRED_PARAM,
+                    'message': get_error_message(MISSING_REQUIRED_PARAM)
+                }), 400
             
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'status': status.to_dict()
-            }
-        })
-        
+            # 获取或创建学习状态
+            status = WordLearningStatus.query.filter_by(
+                child_id=data['child_id'],
+                yuwen_item_id=data['yuwen_item_id']
+            ).first()
+            
+            if not status:
+                status = WordLearningStatus(
+                    child_id=data['child_id'],
+                    word=data['word'],
+                    yuwen_item_id=data['yuwen_item_id']
+                )
+            
+            # 更新状态
+            if 'learning_stage' in data:
+                status.learning_stage = data['learning_stage']
+            if 'review_count' in data:
+                status.review_count = data['review_count']
+            if 'next_review' in data:
+                status.next_review = data['next_review']
+            if 'is_mastered' in data:
+                status.is_mastered = data['is_mastered']
+            
+            db.session.add(status)
+            db.session.flush()
+            
+            # 提交事务
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'status': status.to_dict()
+                }
+            })
+        except Exception as e:
+            db.session.rollback()
+            raise e
+            
     except Exception as e:
         logger.error(f"更新词语状态失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({

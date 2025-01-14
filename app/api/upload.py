@@ -1,7 +1,9 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
-from ..utils.logger import log_api_call, logger
+
+from app.utils.decorators import log_api_call
+from ..utils.logger import logger
 from ..utils.error_codes import *
 import traceback
 import os

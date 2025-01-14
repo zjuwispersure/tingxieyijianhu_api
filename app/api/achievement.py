@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required,get_jwt_identity
+
+from app.utils.decorators import log_api_call
 from ..models import Child, Achievement, UserAchievement
 from ..extensions import db
-from ..utils.logger import log_api_call, logger
+from ..utils.logger import logger
 from ..utils.error_codes import *
 import traceback
 
@@ -96,6 +98,72 @@ def get_achievements():
         
     except Exception as e:
         logger.error(f"获取成就列表失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500 
+
+@achievement_bp.route('/achievement/unlock', methods=['POST'])
+@jwt_required()
+@log_api_call
+def unlock_achievement():
+    """解锁成就"""
+    try:
+        # 开启事务
+        db.session.begin_nested()
+        data = request.get_json()
+        user_id = get_jwt_identity()
+        achievement_id = data.get('achievement_id')
+        
+        try:
+            # 验证成就是否存在
+            achievement = Achievement.query.get(achievement_id)
+            if not achievement:
+                return jsonify({
+                    'status': 'error',
+                    'code': RESOURCE_NOT_FOUND,
+                    'message': get_error_message(RESOURCE_NOT_FOUND)
+                }), 404
+                
+            # 检查是否已解锁
+            existing = UserAchievement.query.filter_by(
+                user_id=user_id,
+                achievement_id=achievement_id
+            ).first()
+            
+            if existing:
+                return jsonify({
+                    'status': 'error',
+                    'code': ACHIEVEMENT_ALREADY_UNLOCKED,
+                    'message': get_error_message(ACHIEVEMENT_ALREADY_UNLOCKED)
+                }), 400
+                
+            # 创建解锁记录
+            user_achievement = UserAchievement(
+                user_id=user_id,
+                achievement_id=achievement_id
+            )
+            
+            db.session.add(user_achievement)
+            db.session.flush()
+            
+            # 提交事务
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'achievement': achievement.to_dict(),
+                    'unlocked_at': user_achievement.unlocked_at.isoformat()
+                }
+            })
+        except Exception as e:
+            db.session.rollback()
+            raise e
+            
+    except Exception as e:
+        logger.error(f"解锁成就失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
             'status': 'error',
             'code': INTERNAL_ERROR,

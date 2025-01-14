@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from app.utils.decorators import log_api_call
 from ..models import Feedback
 from ..extensions import db
-from ..utils.logger import log_api_call, logger
+from ..utils.logger import logger
 from ..utils.error_codes import *
 import traceback
 from sqlalchemy.exc import SQLAlchemyError
@@ -39,62 +41,36 @@ def create_feedback():
     }
     """
     try:
+        # 开启事务
+        db.session.begin_nested()
         data = request.get_json()
-        if not data:
-            return jsonify({
-                'status': 'error',
-                'code': INVALID_REQUEST_FORMAT,
-                'message': get_error_message(INVALID_REQUEST_FORMAT)
-            }), 400
-            
-        # 验证必要字段
-        required_fields = ['type', 'content']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({
-                    'status': 'error',
-                    'code': MISSING_REQUIRED_PARAM,
-                    'message': get_error_message(MISSING_REQUIRED_PARAM, field)
-                }), 400
-                
-        # 验证反馈类型
-        valid_types = {'bug', 'suggestion', 'other'}
-        if data['type'] not in valid_types:
-            return jsonify({
-                'status': 'error',
-                'code': INVALID_PARAM_VALUE,
-                'message': get_error_message(INVALID_PARAM_VALUE, 'type')
-            }), 400
-            
-        # 创建反馈
         user_id = get_jwt_identity()
-        feedback = Feedback(
-            user_id=int(user_id),
-            type=data['type'],
-            content=data['content'],
-            contact=data.get('contact'),
-            images=data.get('images', [])
-        )
         
         try:
-            db.session.add(feedback)
-            db.session.commit()
-        except SQLAlchemyError as e:
-            db.session.rollback()
-            logger.error(f"数据库错误: {str(e)}")
-            return jsonify({
-                'status': 'error',
-                'code': DATABASE_ERROR,
-                'message': get_error_message(DATABASE_ERROR)
-            }), 500
+            # 创建反馈
+            feedback = Feedback(
+                user_id=user_id,
+                title=data['title'],
+                content=data['content'],
+                type=data.get('type', 'general')
+            )
             
-        return jsonify({
-            'status': 'success',
-            'data': {
-                'feedback': feedback.to_dict()
-            }
-        })
-        
+            db.session.add(feedback)
+            db.session.flush()
+            
+            # 提交事务
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'data': {
+                    'feedback': feedback.to_dict()
+                }
+            })
+        except Exception as e:
+            db.session.rollback()
+            raise e
+            
     except Exception as e:
         logger.error(f"创建反馈失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({

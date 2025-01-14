@@ -4,4 +4,4 @@ from flask import Blueprint
 auth_bp = Blueprint('auth', __name__)
 
 # 导入路由 - 放在最后避免循环导入
-from . import routes 
+from . import auth_routes

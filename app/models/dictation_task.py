@@ -17,7 +17,7 @@ class DictationTask(BaseModel):
     
     # 关联的听写内容
     items = relationship("DictationTaskItem", back_populates="task")
-    sessions = relationship("DictationSession", back_populates="task")
+    sessions = db.relationship('app.models.dictation_session.DictationSession', back_populates='task')
     child = relationship("Child", back_populates="dictation_tasks")
 
 class DictationTaskItem(BaseModel):
@@ -32,6 +32,7 @@ class DictationTaskItem(BaseModel):
     
     task = relationship("DictationTask", back_populates="items")
     yuwen_item = db.relationship('YuwenItem')
+    details = db.relationship('app.models.dictation_session.DictationDetail', back_populates='task_item')
 
     def to_dict(self):
         return {

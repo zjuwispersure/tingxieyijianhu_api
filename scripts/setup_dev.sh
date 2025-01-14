@@ -137,7 +137,7 @@ if [ "$CLEAN_DB" -eq 1 ]; then
     sleep 5
 
     # 执行初始化 SQL 文件
-    docker-compose exec -T mysql mysql -u yuwen -pyuwen123 dictation < migrations/init.sql || {
+    docker-compose exec -T mysql mysql -u yuwen -pyuwen123 dictation < scripts/sql/init.sql || {
         log_error "Database initialization failed"
         exit 1
     }

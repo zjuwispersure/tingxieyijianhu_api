@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from app.utils.decorators import log_api_call
 from ..models import Notification
 from ..extensions import db
-from ..utils.logger import log_api_call, logger
+from ..utils.logger import logger
 from ..utils.error_codes import *
 import traceback
 from datetime import datetime
@@ -89,47 +91,43 @@ def get_notifications():
             'message': get_error_message(INTERNAL_ERROR)
         }), 500
 
-@notification_bp.route('/notifications/read', methods=['POST'])
+@notification_bp.route('/notifications/mark-read', methods=['POST'])
 @jwt_required()
 @log_api_call
-def mark_as_read():
-    """标记通知为已读
-    
-    请求参数:
-    {
-        "notification_ids": [1, 2, 3]  # 通知ID列表，为空则标记所有为已读
-    }
-    """
+def mark_notifications_read():
+    """标记通知为已读"""
     try:
+        # 开启事务
+        db.session.begin_nested()
         data = request.get_json()
-        if not data:
-            return jsonify({
-                'status': 'error',
-                'code': INVALID_REQUEST_FORMAT,
-                'message': get_error_message(INVALID_REQUEST_FORMAT)
-            }), 400
-            
+        user_id = get_jwt_identity()
         notification_ids = data.get('notification_ids', [])
         
-        user_id = int(get_jwt_identity())
-        # 构建更新查询
-        query = Notification.query.filter_by(
-            user_id=user_id,
-            is_read=False
-        )
-        
-        if notification_ids:
-            query = query.filter(Notification.id.in_(notification_ids))
+        try:
+            # 构建查询
+            query = Notification.query.filter_by(
+                user_id=user_id,
+                is_read=False
+            )
             
-        # 更新为已读
-        query.update({'is_read': True})
-        db.session.commit()
-        
-        return jsonify({
-            'status': 'success',
-            'message': '标记成功'
-        })
-        
+            if notification_ids:
+                query = query.filter(Notification.id.in_(notification_ids))
+                
+            # 更新为已读
+            query.update({'is_read': True})
+            db.session.flush()
+            
+            # 提交事务
+            db.session.commit()
+            
+            return jsonify({
+                'status': 'success',
+                'message': '标记成功'
+            })
+        except Exception as e:
+            db.session.rollback()
+            raise e
+            
     except Exception as e:
         logger.error(f"标记通知已读失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({

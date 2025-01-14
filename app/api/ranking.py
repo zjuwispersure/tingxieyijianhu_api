@@ -1,8 +1,10 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
+
+from app.utils.decorators import log_api_call
 from ..models import Child, DictationTask, DictationTaskItem
 from ..extensions import db
-from ..utils.logger import log_api_call, logger
+from ..utils.logger import logger
 from ..utils.error_codes import *
 import traceback
 from sqlalchemy import func, Integer
