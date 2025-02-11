@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required,get_jwt_identity
 
 from app.utils.decorators import log_api_call
-from ..models import Child, DictationTask, DictationTaskItem, YuwenItem
+from ..models import Child, DictationSession, DictationDetail, YuwenItem
 from ..extensions import db
 from ..utils.logger import logger
 from ..utils.error_codes import *
@@ -67,62 +67,27 @@ def get_progress_overview():
         ).count()
         
         # 获取学习情况统计
-        stats = DictationTaskItem.query.join(
-            DictationTask
+        stats = DictationDetail.query.join(
+            DictationSession
         ).filter(
-            DictationTask.child_id == child_id
+            DictationSession.child_id == child_id
         ).with_entities(
-            func.count(func.distinct(DictationTaskItem.word)).label('learned_words'),
-            func.count(DictationTask.id).label('total_tasks'),
-            func.count(DictationTaskItem.id).label('total_items'),
-            func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct_items')
+            func.count(func.distinct(DictationDetail.word)).label('learned_words'),
+            func.count(DictationDetail.id).label('total_items'),
+            func.sum(DictationDetail.is_correct.cast(Integer)).label('correct_items')
         ).first()
         
-        # 获取已掌握的词数（正确率>=80%的词）
-        mastered = DictationTaskItem.query.join(
-            DictationTask
+        # 获取已掌握的词数
+        mastered = DictationDetail.query.join(
+            DictationSession, YuwenItem
         ).filter(
-            DictationTask.child_id == child_id
+            DictationSession.child_id == child_id,
+            YuwenItem.unit == unit.unit
         ).group_by(
-            DictationTaskItem.word
+            DictationDetail.word
         ).having(
-            func.sum(DictationTaskItem.is_correct.cast(Integer)) / func.count(DictationTaskItem.id) >= 0.8
+            func.sum(DictationDetail.is_correct.cast(Integer)) / func.count(DictationDetail.id) >= 0.8
         ).count()
-        
-        # 计算学习天数和连续学习天数
-        study_dates = db.session.query(
-            func.date(DictationTask.created_at).label('date')
-        ).filter(
-            DictationTask.child_id == child_id
-        ).group_by(
-            func.date(DictationTask.created_at)
-        ).all()
-        
-        study_dates = [d.date for d in study_dates]
-        learning_days = len(study_dates)
-        
-        # 计算当前连续学习天数
-        current_streak = 0
-        today = datetime.now().date()
-        for i in range(learning_days):
-            if (today - timedelta(days=i)).date() in study_dates:
-                current_streak += 1
-            else:
-                break
-                
-        # 计算最长连续学习天数
-        longest_streak = 0
-        current = 0
-        study_dates.sort()
-        
-        for i in range(len(study_dates)):
-            if i == 0 or (study_dates[i] - study_dates[i-1]).days == 1:
-                current += 1
-            else:
-                longest_streak = max(longest_streak, current)
-                current = 1
-                
-        longest_streak = max(longest_streak, current)
         
         return jsonify({
             'status': 'success',
@@ -130,22 +95,18 @@ def get_progress_overview():
                 'total_words': total_words,
                 'learned_words': stats.learned_words,
                 'mastered_words': mastered,
-                'learning_days': learning_days,
-                'total_tasks': stats.total_tasks,
                 'accuracy_rate': stats.correct_items / stats.total_items if stats.total_items else 0,
-                'daily_average': stats.total_items / learning_days if learning_days else 0,
-                'current_streak': current_streak,
-                'longest_streak': longest_streak
+                'completion_rate': stats.learned_words / total_words
             }
         })
         
     except Exception as e:
-        logger.error(f"获取学习进度概览失败: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"获取学习进度失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
             'status': 'error',
             'code': INTERNAL_ERROR,
             'message': get_error_message(INTERNAL_ERROR)
-        }), 500
+        }), 500 
 
 @progress_bp.route('/progress/units', methods=['GET'])
 @jwt_required()
@@ -207,27 +168,27 @@ def get_unit_progress():
         unit_stats = []
         for unit in units:
             # 获取已学习和掌握的词数
-            stats = DictationTaskItem.query.join(
-                DictationTask, YuwenItem
+            stats = DictationDetail.query.join(
+                DictationSession, YuwenItem
             ).filter(
-                DictationTask.child_id == child_id,
+                DictationSession.child_id == child_id,
                 YuwenItem.unit == unit.unit
             ).with_entities(
-                func.count(func.distinct(DictationTaskItem.word)).label('learned_words'),
-                func.count(DictationTaskItem.id).label('total_items'),
-                func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct_items')
+                func.count(func.distinct(DictationDetail.word)).label('learned_words'),
+                func.count(DictationDetail.id).label('total_items'),
+                func.sum(DictationDetail.is_correct.cast(Integer)).label('correct_items')
             ).first()
             
             # 获取已掌握的词数
-            mastered = DictationTaskItem.query.join(
-                DictationTask, YuwenItem
+            mastered = DictationDetail.query.join(
+                DictationSession, YuwenItem
             ).filter(
-                DictationTask.child_id == child_id,
+                DictationSession.child_id == child_id,
                 YuwenItem.unit == unit.unit
             ).group_by(
-                DictationTaskItem.word
+                DictationDetail.word
             ).having(
-                func.sum(DictationTaskItem.is_correct.cast(Integer)) / func.count(DictationTaskItem.id) >= 0.8
+                func.sum(DictationDetail.is_correct.cast(Integer)) / func.count(DictationDetail.id) >= 0.8
             ).count()
             
             unit_stats.append({

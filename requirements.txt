@@ -29,3 +29,8 @@ gunicorn
 pymysql
 cryptography
 redis==4.5.1
+
+oss2
+aliyun-python-sdk-sts
+aliyun-python-sdk-core
+requests>=2.25.1

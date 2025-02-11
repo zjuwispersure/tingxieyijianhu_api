@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required,get_jwt_identity
-from ..models import Child, DictationTask, DictationTaskItem, YuwenItem
+from ..models import Child, DictationSession, DictationDetail, YuwenItem
 from ..extensions import db
 from ..utils.logger import log_api_call, logger
 from ..utils.error_codes import *
@@ -77,30 +77,34 @@ def get_overview():
         daily_stats = []
         for i in range(days):
             date = start_date + timedelta(days=i)
-            stats = DictationTask.query.filter(
-                DictationTask.child_id == child_id,
-                func.date(DictationTask.created_at) == date
-            ).join(DictationTaskItem).with_entities(
-                func.count(DictationTask.id).label('tasks'),
-                func.count(DictationTaskItem.id).label('words'),
-                func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct')
+            stats = DictationDetail.query.join(
+                DictationSession
+            ).filter(
+                DictationSession.child_id == child_id,
+                func.date(DictationSession.created_at) == date
+            ).with_entities(
+                func.count(DictationSession.id).label('sessions'),
+                func.count(DictationDetail.id).label('words'),
+                func.sum(DictationDetail.is_correct.cast(Integer)).label('correct')
             ).first()
             
             daily_stats.append({
                 'date': date.isoformat(),
-                'tasks': stats.tasks,
-                'words': stats.words,
+                'sessions': stats.sessions or 0,
+                'words': stats.words or 0,
                 'accuracy': stats.correct / stats.words if stats.words else 0
             })
             
         # 获取总体统计
-        total_stats = DictationTask.query.filter(
-            DictationTask.child_id == child_id,
-            DictationTask.created_at >= start_date
-        ).join(DictationTaskItem).with_entities(
-            func.count(DictationTask.id).label('total_tasks'),
-            func.count(DictationTaskItem.id).label('total_words'),
-            func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct_words')
+        total_stats = DictationDetail.query.join(
+            DictationSession
+        ).filter(
+            DictationSession.child_id == child_id,
+            DictationSession.created_at >= start_date
+        ).with_entities(
+            func.count(DictationSession.id).label('total_sessions'),
+            func.count(DictationDetail.id).label('total_words'),
+            func.sum(DictationDetail.is_correct.cast(Integer)).label('correct_words')
         ).first()
         
         # 获取各类型词语统计
@@ -115,25 +119,25 @@ def get_overview():
             ).count()
             
             # 获取已学习词数
-            learned = DictationTaskItem.query.join(
-                DictationTask, YuwenItem
+            learned = DictationDetail.query.join(
+                DictationSession, YuwenItem
             ).filter(
-                DictationTask.child_id == child_id,
+                DictationSession.child_id == child_id,
                 YuwenItem.type == type_
             ).group_by(
-                DictationTaskItem.word
+                DictationDetail.word
             ).count()
             
             # 获取已掌握词数
-            mastered = DictationTaskItem.query.join(
-                DictationTask, YuwenItem
+            mastered = DictationDetail.query.join(
+                DictationSession, YuwenItem
             ).filter(
-                DictationTask.child_id == child_id,
+                DictationSession.child_id == child_id,
                 YuwenItem.type == type_
             ).group_by(
-                DictationTaskItem.word
+                DictationDetail.word
             ).having(
-                func.sum(DictationTaskItem.is_correct.cast(Integer)) / func.count(DictationTaskItem.id) >= 0.8
+                func.sum(DictationDetail.is_correct.cast(Integer)) / func.count(DictationDetail.id) >= 0.8
             ).count()
             
             word_types[type_] = {
@@ -145,7 +149,7 @@ def get_overview():
         return jsonify({
             'status': 'success',
             'data': {
-                'total_tasks': total_stats.total_tasks,
+                'total_tasks': total_stats.total_sessions,
                 'total_words': total_stats.total_words,
                 'accuracy_rate': total_stats.correct_words / total_stats.total_words if total_stats.total_words else 0,
                 'daily_stats': daily_stats,
@@ -221,10 +225,10 @@ def get_word_stats():
             }), 404
             
         # 构建查询
-        query = DictationTaskItem.query.join(
-            DictationTask, YuwenItem
+        query = DictationDetail.query.join(
+            DictationSession, YuwenItem
         ).filter(
-            DictationTask.child_id == child_id
+            DictationSession.child_id == child_id
         )
         
         if item_type:
@@ -235,23 +239,23 @@ def get_word_stats():
             
         # 分组统计
         query = query.group_by(
-            DictationTaskItem.word
+            DictationDetail.word
         ).with_entities(
-            DictationTaskItem.word,
-            func.count(DictationTaskItem.id).label('total_count'),
-            func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct_count'),
-            func.max(DictationTaskItem.created_at).label('last_review')
+            DictationDetail.word,
+            func.count(DictationDetail.id).label('total_count'),
+            func.sum(DictationDetail.is_correct.cast(Integer)).label('correct_count'),
+            func.max(DictationDetail.created_at).label('last_review')
         )
         
         # 排序
         if sort == 'accuracy':
             query = query.order_by(
-                (func.sum(DictationTaskItem.is_correct.cast(Integer)) / func.count(DictationTaskItem.id)).desc()
+                (func.sum(DictationDetail.is_correct.cast(Integer)) / func.count(DictationDetail.id)).desc()
             )
         elif sort == 'frequency':
-            query = query.order_by(func.count(DictationTaskItem.id).desc())
+            query = query.order_by(func.count(DictationDetail.id).desc())
         else:  # latest
-            query = query.order_by(func.max(DictationTaskItem.created_at).desc())
+            query = query.order_by(func.max(DictationDetail.created_at).desc())
             
         # 分页
         pagination = query.paginate(page=page, per_page=per_page)

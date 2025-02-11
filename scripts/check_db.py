@@ -1,5 +1,5 @@
 from app import create_app, db
-from app.models import User, Family, Child, DictationTask
+from app.models import User, Family, Child, DictationSession
 from sqlalchemy import inspect
 
 def check_database():
@@ -12,7 +12,7 @@ def check_database():
                 User.__table__,
                 Family.__table__,
                 Child.__table__,
-                DictationTask.__table__,
+                DictationSession.__table__,
                 # ... 其他表
             ]
             

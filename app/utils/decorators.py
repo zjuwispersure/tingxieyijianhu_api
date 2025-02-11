@@ -6,14 +6,77 @@ from ..utils.error_codes import *
 from .logger import logger
 import traceback
 from ..models.family import UserFamilyRelation
+import logging
+import time
+import json
+from sqlalchemy.exc import OperationalError
+from time import sleep
 
 
 def log_api_call(f):
     """记录 API 调用的装饰器"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        logger.info(f"API Call: {request.method} {request.path}")
-        return f(*args, **kwargs)
+        # 记录请求开始时间
+        start_time = time.time()
+        
+        # 获取请求信息
+        endpoint = request.endpoint
+        method = request.method
+        url = request.url
+        headers = dict(request.headers)
+        
+        # 获取请求体（如果有）
+        try:
+            request_data = None
+            if request.method == 'GET':
+                request_data = dict(request.args)
+            elif request.is_json:
+                request_data = request.get_json()
+            elif request.form:
+                request_data = dict(request.form)
+                
+            # 只在有数据时记录
+            if request_data:
+                logger.info(f"Request Data: {json.dumps(request_data, indent=2, ensure_ascii=False)}")
+                
+        except Exception as e:
+            logger.warning(f"Error parsing request data: {str(e)}")
+
+        # 记录请求信息
+        logger.info(f"API Request - {endpoint} [{method}]:")
+        #logger.info(f"URL: {url}")
+        #logger.info(f"Headers: {json.dumps(headers, indent=2)}")
+
+        try:
+            # 执行原始函数
+            response = f(*args, **kwargs)
+            
+            # 计算执行时间
+            execution_time = time.time() - start_time
+            
+            # 记录响应信息
+            if hasattr(response, 'json'):
+                response_data = response.json
+            elif isinstance(response, tuple):
+                response_data = response[0].json
+            else:
+                response_data = response
+                
+            logger.info(f"API Response - {endpoint} [{method}]:")
+            logger.info(f"Status Code: {getattr(response, 'status_code', 200)}")
+            logger.info(f"Response Data: {json.dumps(response_data, indent=2, ensure_ascii=False)}")
+            logger.info(f"Execution Time: {execution_time:.3f}s")
+            
+            return response
+            
+        except Exception as e:
+            # 记录异常信息
+            logger.error(f"API Error - {endpoint} [{method}]:")
+            logger.error(f"Error: {str(e)}")
+            logger.error(f"Execution Time: {time.time() - start_time:.3f}s")
+            raise
+            
     return decorated_function
 
 
@@ -228,3 +291,27 @@ def admin_required(f):
             }), 403
             
     return decorated_function
+
+def with_db_retry(max_retries=3, delay=0.1):
+    """数据库操作重试装饰器"""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    return f(*args, **kwargs)
+                except OperationalError as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        logger.info(f"Retrying database operation... (attempt {attempt + 1})")
+                        time.sleep(delay)
+                        continue
+                    
+            logger.error(f"Database operation failed after {max_retries} attempts")
+            # 重新抛出异常，让上层错误处理来处理
+            raise last_error
+            
+        return wrapper
+    return decorator

@@ -3,136 +3,248 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from ...models.child import Child
 from ...models.yuwen_item import YuwenItem
 from ...models.family import Family, FamilyMember, UserFamilyRelation
-from ...models.dictation_config import DictationConfig
+from ...models.dictation import DictationConfig
 from ...extensions import db
 from ...utils.logger import logger
-from ...utils.decorators import log_api_call
+from ...utils.decorators import log_api_call, with_db_retry
 from ...utils.error_codes import *
 import traceback
 from . import family_bp
 from ...models.user import User 
+from sqlalchemy.exc import IntegrityError
+from datetime import datetime
 
 @family_bp.route('/child/add', methods=['POST'])
 @jwt_required()
 @log_api_call
 def add_child():
+    """添加孩子"""
     try:
-        # 开启事务
-        db.session.begin_nested()
-
         data = request.get_json()
-        user_id = get_jwt_identity()
-
+        current_user_id = get_jwt_identity()
         
-        # 获取用户下一个可用的 child_id
-        max_child = Child.query.filter_by(user_id=user_id).order_by(Child.child_id.desc()).first()
-        next_child_id = (max_child.child_id + 1) if max_child else 1
-        relation = UserFamilyRelation.query.filter_by(user_id=user_id).first()
-
-        if next_child_id == 1:
-            # 检查用户是否已有家庭关系
-            relation = UserFamilyRelation.query.filter_by(user_id=user_id).first()
-            
-            # 如果没有家庭关系,创建新家庭
-            if not relation:
-                try:
-                    user = User.query.get(user_id)
-                    family_name = f"{user.nickname or '我'}的家庭"
-                    
-                    # 创建新家庭
-                    family = Family(
-                        name=family_name,
-                        created_by=user_id
-                    )
-                    db.session.add(family)
-                    db.session.flush()
-                    
-                    # 创建用户-家庭关系
-                    relation = UserFamilyRelation(
-                        user_id=user_id,
-                        family_id=family.id,
-                        role='parent',
-                        is_admin=True
-                    )
-                    db.session.add(relation)
-                    db.session.flush()
-                except Exception as e:
-                    db.session.rollback()
-                    raise e
-            
-        family_id = relation.family_id     
-            
-        try:
-            # 创建 Child 记录
-            child = Child(
-                user_id=user_id,
-                family_id=family_id,
-                child_id=next_child_id,
-                nickname=data['nickname'],
-                province=data.get('province'),
-                city=data.get('city'),
-                grade=data.get('grade'),
-                semester=data.get('semester'),
-                textbook_version=data.get('textbook_version')
-            )
-            db.session.add(child)
-            db.session.flush()
-            
-            # 同步创建 FamilyMember 记录
-            member = FamilyMember(
-                family_id=family_id,
-                name=data['nickname'],
-                role='child',
-                is_child=True
-            )
-            db.session.add(member)
-            db.session.flush()
-            
-            # 提交事务
-            db.session.commit()
-            
+        # 获取用户
+        user = User.query.get(current_user_id)
+        if not user:
             return jsonify({
-                'status': 'success',
-                'data': {
-                    'child_id': child.id,
-                    'family_id': family_id
-                }
-            })
-        except Exception as e:
-            # 回滚所有操作
-            db.session.rollback()
-            raise e
+                'status': 'error',
+                'code': USER_NOT_FOUND,
+                'message': '用户不存在'
+            }), 404
+        
+        # 获取或创建家庭
+        relation = UserFamilyRelation.query.filter_by(user_id=current_user_id).first()
+        if not relation:
+            family_name = "我的家庭"  # 使用默认名称
+            family = Family(
+                name=family_name,
+                created_by=current_user_id
+            )
+            db.session.add(family)
+            db.session.flush()  # 获取 family.id
             
+            # 创建用户-家庭关系
+            relation = UserFamilyRelation(
+                user_id=current_user_id,
+                family_id=family.id,
+                role='parent',
+                is_admin=True
+            )
+            db.session.add(relation)
+            
+        # 验证必需参数
+        required_fields = ['nickname']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({
+                    'status': 'error',
+                    'code': MISSING_REQUIRED_PARAM,
+                    'message': get_error_message(MISSING_REQUIRED_PARAM, field)
+                }), 400
+        
+        # 检查昵称是否已存在
+        if Child.check_nickname_exists(relation.family_id, data['nickname']):
+            return jsonify({
+                'status': 'error',
+                'code': DUPLICATE_NICKNAME,
+                'message': '该昵称在家庭内已存在'
+            }), 400
+        
+        # 获取下一个可用的 child_id
+        max_child = Child.query.filter_by(user_id=current_user_id).order_by(Child.child_id.desc()).first()
+        next_child_id = (max_child.child_id + 1) if max_child else 1
+        
+        # 创建新孩子
+        child = Child(
+            user_id=current_user_id,
+            family_id=relation.family_id,
+            child_id=next_child_id,
+            nickname=data['nickname'],
+            province=data.get('province'),
+            city=data.get('city'),
+            grade=data.get('grade'),
+            semester=data.get('semester'),
+            textbook_version=data.get('textbook_version')
+        )
+        db.session.add(child)
+        
+        # 同步创建 FamilyMember 记录
+        member = FamilyMember(
+            family_id=relation.family_id,
+            name=data['nickname'],
+            role='child',
+            is_child=True
+        )
+        db.session.add(member)
+        
+        # 提交事务
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'code': 0,
+            'data': child.to_dict()
+        })
+        
+    except IntegrityError as e:
+        # 处理唯一约束冲突
+        db.session.rollback()
+        if "unique_user_family_child" in str(e):
+            return jsonify({
+                'status': 'error',
+                'code': DUPLICATE_CHILD,
+                'message': get_error_message(DUPLICATE_CHILD)
+            }), 400
+        raise
+        
+    except ValueError as e:
+        # 处理验证错误
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'code': INVALID_PARAMS,
+            'message': str(e)
+        }), 400
+        
     except Exception as e:
-        logger.error(f"增加孩子失败: {str(e)}\n{traceback.format_exc()}")
+        # 处理其他错误
+        db.session.rollback()
+        raise
+        
+    except Exception as e:
+        # 确保清理会话状态
+        db.session.remove()
+        logger.error(f"添加孩子失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
             'status': 'error',
             'code': INTERNAL_ERROR,
             'message': get_error_message(INTERNAL_ERROR)
-        }), 500 
+        }), 500
 
-@family_bp.route('/child/get', methods=['GET'])
-@log_api_call
+@family_bp.route('/child/get/all', methods=['GET'])
 @jwt_required()
-def get_children():
+@log_api_call
+@with_db_retry()
+def get_all_children():
     """获取当前用户的所有孩子"""
     try:
-        user_id = int(get_jwt_identity())
-        children = Child.query.filter_by(user_id=user_id).all()
+        current_user_id = get_jwt_identity()
+        user_id = int(current_user_id)
+        
+        children = Child.query.filter_by(
+            user_id=user_id,
+            is_deleted=False
+        ).order_by(
+            Child.child_id.asc()
+        ).all()
+        
+        # 记录查询结果
+        child_info = [{
+            'id': c.id,
+            'child_id': c.child_id,
+            'nickname': c.nickname
+        } for c in children]
+        logger.info(f"Found children: {child_info}")
+        
         return jsonify({
             'status': 'success',
-            'data': [{
-                'id': child.id,
-                'nickname': child.nickname,
-                'grade': child.grade,
-                'semester': child.semester,
-                'province': child.province,
-                'city': child.city,
-                'textbook_version': child.textbook_version
-            } for child in children]
+            'code': 0,
+            'data': {
+                'children': [child.to_dict() for child in children]
+            }
         })
+        
     except Exception as e:
         logger.error(f"获取孩子列表失败: {str(e)}\n{traceback.format_exc()}")
+        return jsonify({
+            'status': 'error',
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
+        }), 500
+
+@family_bp.route('/child/get/', methods=['GET'])
+@jwt_required()
+@log_api_call
+def get_child():
+    """获取指定孩子的信息
+    
+    Query Parameters:
+        child_id: 孩子ID
+        
+    Returns:
+        成功返回:
+        {
+            'status': 'success',
+            'code': 0,
+            'data': {
+                'child': {...}  # 孩子信息
+            }
+        }
+        
+        失败返回:
+        {
+            'status': 'error',
+            'code': CHILD_NOT_FOUND,
+            'message': '找不到该孩子'
+        }
+    """
+    try:
+        # 获取参数
+        child_id = request.args.get('child_id', type=int)
+        if not child_id:
+            return jsonify({
+                'status': 'error',
+                'code': MISSING_REQUIRED_PARAM,
+                'message': get_error_message(MISSING_REQUIRED_PARAM, 'child_id')
+            }), 400
+            
+        # 获取当前用户ID
+        current_user_id = get_jwt_identity()
+        user_id = int(current_user_id)
+        
+        # 查询指定孩子
+        child = Child.query.filter_by(
+            id=child_id,
+            user_id=user_id
+        ).first()
+        
+        if not child:
+            return jsonify({
+                'status': 'error',
+                'code': CHILD_NOT_FOUND,
+                'message': get_error_message(CHILD_NOT_FOUND)
+            }), 404
+            
+        return jsonify({
+            'status': 'success',
+            'code': 0,
+            'data': {
+                'child': child.to_dict()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"获取孩子信息失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
             'status': 'error',
             'code': INTERNAL_ERROR,
@@ -210,8 +322,9 @@ def get_children_count():
 
 
 @family_bp.route('/child/update', methods=['POST'])
-@log_api_call
 @jwt_required()
+@log_api_call
+@with_db_retry(max_retries=3, delay=0.2)
 def update_child():
     """更新孩子信息
     
@@ -226,69 +339,74 @@ def update_child():
         "textbook_version": "rj"   # 选填，教材版本
     }
     
-    返回数据:
-    {
-        "status": "success",        # success 表示成功，error 表示失败
-        "message": "保存成功"       # 成功或错误信息
-    }
+    Returns:
+        成功返回:
+        {
+            "status": "success",        # success 表示成功，error 表示失败
+            "code": 0,                  # 错误码，0 表示成功
+            "message": "保存成功",      # 成功或错误信息
+            "data": {                   # 更新后的数据
+                "id": 1,
+                "nickname": "小明",
+                ...
+            }
+        }
+        
+        失败返回:
+        {
+            "status": "error",
+            "code": int,               # 错误码
+            "message": str             # 错误信息
+        }
     
-    错误码:
-    - 400: 参数错误
-    - 404: 找不到该孩子
-    - 500: 服务器错误
+    Raises:
+        400: 参数错误
+        404: 找不到该孩子
+        500: 服务器错误
     """
     try:
-        # 开启事务
-        db.session.begin_nested()
         data = request.get_json()
-        if not data or 'id' not in data:
+        child_id = data.get('id')
+        
+        # 验证孩子所有权
+        child = Child.query.filter_by(
+            id=child_id,
+            user_id=int(get_jwt_identity())
+        ).first()
+        
+        if not child:
             return jsonify({
                 'status': 'error',
-                'message': '缺少必要参数 id'
-            }), 400
+                'code': CHILD_NOT_FOUND,
+                'message': get_error_message(CHILD_NOT_FOUND)
+            }), 404
+            
+        # 更新字段
+        for field in ['grade', 'semester', 'textbook_version', 'province', 'city']:
+            if field in data:
+                setattr(child, field, data[field])
+                
+        # 更新时间戳
+        child.updated_at = datetime.utcnow()
         
-        user_id = get_jwt_identity()
-        try:
-            # 查找孩子并验证所有权
-            child = Child.query.filter_by(
-                id=data['id'],
-                user_id=int(user_id)
-            ).first()
-            
-            if not child:
-                return jsonify({
-                    'status': 'error',
-                    'message': '找不到该孩子'
-                }), 404
-            
-            # 更新信息（只更新提供的字段）
-            if 'nickname' in data:
-                child.nickname = data['nickname']
-            if 'province' in data:
-                child.province = data['province']
-            if 'city' in data:
-                child.city = data['city']
-            if 'grade' in data:
-                child.grade = data['grade']
-            if 'semester' in data:
-                child.semester = data['semester']
-            if 'textbook_version' in data:
-                child.textbook_version = data['textbook_version']
-            
-            # 提交事务
-            db.session.commit()
-            
-            return jsonify({
-                'status': 'success',
-                'message': '保存成功'
-            })
-        except Exception as e:
-            db.session.rollback()
-            raise e
-            
+        # 提交更改
+        db.session.commit()
+        
+        # 重新查询以确保数据已更新
+        child = Child.query.filter_by(id=child_id).first()
+        
+        return jsonify({
+            'status': 'success',
+            'code': 0,
+            'message': '保存成功',
+            'data': child.to_dict()
+        })
+        
     except Exception as e:
+        db.session.rollback()
         logger.error(f"更新孩子信息失败: {str(e)}\n{traceback.format_exc()}")
         return jsonify({
             'status': 'error',
-            'message': f'更新失败: {str(e)}'
+            'code': INTERNAL_ERROR,
+            'message': get_error_message(INTERNAL_ERROR)
         }), 500

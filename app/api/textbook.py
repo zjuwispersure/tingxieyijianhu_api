@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from app.utils.decorators import log_api_call
-from ..models import Child, YuwenItem, DictationTaskItem, DictationTask
+from ..models import Child, YuwenItem, DictationSession, DictationDetail
 from ..extensions import db
 from ..utils.logger import logger
 from ..utils.error_codes import *
@@ -78,27 +78,27 @@ def get_units():
         result = []
         for unit in units:
             # 获取已学习和掌握的词数
-            stats = DictationTaskItem.query.join(
-                DictationTask, YuwenItem
+            stats = DictationDetail.query.join(
+                DictationSession, YuwenItem
             ).filter(
-                DictationTask.child_id == child_id,
+                DictationSession.child_id == child_id,
                 YuwenItem.unit == unit.unit
             ).with_entities(
-                func.count(func.distinct(DictationTaskItem.word)).label('learned_words'),
-                func.count(DictationTaskItem.id).label('total_items'),
-                func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct_items')
+                func.count(func.distinct(DictationDetail.word)).label('learned_words'),
+                func.count(DictationDetail.id).label('total_items'),
+                func.sum(DictationDetail.is_correct.cast(Integer)).label('correct_items')
             ).first()
             
             # 获取已掌握的词数
-            mastered = DictationTaskItem.query.join(
-                DictationTask, YuwenItem
+            mastered = DictationDetail.query.join(
+                DictationSession, YuwenItem
             ).filter(
-                DictationTask.child_id == child_id,
+                DictationSession.child_id == child_id,
                 YuwenItem.unit == unit.unit
             ).group_by(
-                DictationTaskItem.word
+                DictationDetail.word
             ).having(
-                func.sum(DictationTaskItem.is_correct.cast(Integer)) / func.count(DictationTaskItem.id) >= 0.8
+                func.sum(DictationDetail.is_correct.cast(Integer)) / func.count(DictationDetail.id) >= 0.8
             ).count()
             
             result.append({
@@ -190,15 +190,15 @@ def get_words():
         result = []
         for word in words:
             # 获取学习情况
-            stats = DictationTaskItem.query.join(
-                DictationTask
+            stats = DictationDetail.query.join(
+                DictationSession
             ).filter(
-                DictationTask.child_id == child_id,
-                DictationTaskItem.word == word.word
+                DictationSession.child_id == child_id,
+                DictationDetail.word == word.word
             ).with_entities(
-                func.count(DictationTaskItem.id).label('total'),
-                func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct'),
-                func.max(DictationTaskItem.created_at).label('last_review')
+                func.count(DictationDetail.id).label('total'),
+                func.sum(DictationDetail.is_correct.cast(Integer)).label('correct'),
+                func.max(DictationDetail.created_at).label('last_review')
             ).first()
             
             accuracy_rate = stats.correct / stats.total if stats and stats.total else 0

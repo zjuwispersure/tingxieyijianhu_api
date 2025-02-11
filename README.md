@@ -53,3 +53,35 @@ generate_yuwen_audio.py用来生成语文教材音频
 
 ### 4. 导入语文教材数据
 import_yuwen_data.py用来导入语文教材数据，生成音频，并导入到数据库
+
+## 环境配置
+
+1. 复制环境变量模板
+```bash
+cp .env.example .env
+```
+
+2. 修改 .env 文件，填入实际的配置值：
+- 基础配置
+  - SECRET_KEY: Flask 密钥
+  - JWT_SECRET_KEY: JWT 加密密钥
+  
+- 数据库配置
+  - MYSQL_ROOT_PASSWORD: MySQL root密码
+  - MYSQL_USER: 数据库用户名
+  - MYSQL_PASSWORD: 数据库密码
+  - MYSQL_DATABASE: 数据库名
+  
+- 微信配置
+  - WX_APP_ID: 微信小程序 APP ID
+  - WX_APP_SECRET: 微信小程序 APP Secret
+  
+- Redis配置
+  - REDIS_URL: Redis连接URL
+
+3. 启动服务
+```bash
+docker-compose up -d
+```
+
+注意：确保敏感配置信息只存在于 .env 文件中，且不要提交到版本控制系统。

@@ -3,13 +3,21 @@ name: yuwen
 services:
   mysql:
     image: mysql:8.0
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: yuwen123
-      MYSQL_DATABASE: dictation
-      MYSQL_USER: yuwen
-      MYSQL_PASSWORD: yuwen123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_VARIABLES: |
+        wait_timeout=28800
+        interactive_timeout=28800
       TZ: Asia/Shanghai
-    command: 
+    command:
+      - --wait_timeout=28800
+      - --interactive_timeout=28800
+      - --max_allowed_packet=32M
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
@@ -37,6 +45,8 @@ services:
 
   yuwen:
     build: .
+    env_file:
+      - .env
     ports:
       - "5000:5000"
     environment:
@@ -45,10 +55,14 @@ services:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - FLASK_DEBUG=1
-      - SQLALCHEMY_DATABASE_URI=mysql+pymysql://yuwen:yuwen123@mysql.yuwen.net:3306/dictation?charset=utf8mb4&connect_timeout=60
-      - REDIS_URL=redis://redis.yuwen.net:6379/0
+      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
+      - REDIS_URL=${REDIS_URL}
       - DATA_DIR=/app/data
       - TZ=Asia/Shanghai
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - ALIBABA_CLOUD_ECS_METADATA=${ALIBABA_CLOUD_ECS_METADATA:-false}
     volumes:
       - .:/app
       - ./data:/app/data
@@ -96,6 +110,15 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  web:
+    build: .
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=development
+      - LOG_LEVEL=info
+    command: gunicorn -c gunicorn.conf.py wsgi:app
 
 networks:
   yuwen_net:

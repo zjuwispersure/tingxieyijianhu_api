@@ -3,6 +3,11 @@
 # 设置错误处理
 set -e
 
+# 加载环境变量
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | xargs)
+fi
+
 # 默认不清理数据库
 CLEAN_DB=0
 
@@ -50,6 +55,10 @@ else
     docker-compose down
 fi
 
+# 构建新镜像
+log_info "Building images..."
+docker-compose build
+
 # 启动 MySQL
 log_info "Starting MySQL..."
 docker-compose up -d mysql
@@ -60,7 +69,7 @@ docker-compose up -d redis
 
 # 等待 MySQL 就绪
 log_info "Waiting for MySQL to be ready..."
-MAX_RETRIES=60  # 增加到 60 次
+MAX_RETRIES=60
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
@@ -69,7 +78,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
         break
     fi
     log_warn "Waiting for MySQL... ($(( RETRY_COUNT + 1 ))/$MAX_RETRIES)"
-    sleep 5  # 增加到 5 秒
+    sleep 5
     RETRY_COUNT=$(( RETRY_COUNT + 1 ))
 done
 
@@ -77,6 +86,15 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     log_error "Error: MySQL failed to start"
     docker-compose logs mysql
     exit 1
+fi
+
+# 如果需要清理数据库，执行初始化脚本
+if [ "$CLEAN_DB" -eq 1 ]; then
+    log_info "Initializing database..."
+    docker-compose exec -T mysql mysql -u yuwen -pyuwen123 dictation < scripts/sql/init.sql || {
+        log_error "Database initialization failed"
+        exit 1
+    }
 fi
 
 # 等待 Redis 就绪
@@ -129,33 +147,13 @@ if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
     exit 1
 fi
 
-if [ "$CLEAN_DB" -eq 1 ]; then  
-    # 执行数据库迁移
-    log_info "Running database migrations..."
-
-    # 等待数据库完全准备好
-    sleep 5
-
-    # 执行初始化 SQL 文件
-    docker-compose exec -T mysql mysql -u yuwen -pyuwen123 dictation < scripts/sql/init.sql || {
-        log_error "Database initialization failed"
-        exit 1
-    }
-
-    # 验证表是否创建成功
-    log_info "Verifying database tables..."
-    docker-compose exec -T mysql mysql -u yuwen -pyuwen123 dictation -e "SHOW TABLES;" || {
-        log_error "Table verification failed"
-        exit 1
-    }
-
-
-# 导入数据
+if [ "$CLEAN_DB" -eq 1 ]; then
+    # 导入数据
     log_info "Importing data..."
     docker-compose exec -T yuwen python scripts/import_yuwen_data.py || {
-    log_error "Data import failed"
-    exit 1
-}
+        log_error "Data import failed"
+        exit 1
+    }
 
     # 生成音频
     log_info "Generating audio files..."

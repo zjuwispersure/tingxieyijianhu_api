@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required,get_jwt_identity
 
 from app.utils.decorators import log_api_call
-from ..models import Child, DictationTask, DictationTaskItem, YuwenItem
+from ..models import Child, DictationSession, DictationDetail, YuwenItem
 from ..extensions import db
 from ..utils.logger import logger
 from ..utils.error_codes import *
@@ -81,49 +81,43 @@ def get_daily_report():
             }), 400
             
         # 获取基础统计
-        stats = DictationTask.query.filter(
-            DictationTask.child_id == child_id,
-            func.date(DictationTask.created_at) == date
-        ).join(DictationTaskItem).with_entities(
-            func.count(DictationTask.id).label('total_tasks'),
-            func.count(DictationTaskItem.id).label('total_words'),
-            func.sum(DictationTaskItem.is_correct.cast(Integer)).label('correct_words'),
-            func.sum(DictationTaskItem.time_spent).label('time_spent'),
-            func.count(func.distinct(case([
-                (DictationTaskItem.review_count == 0, DictationTaskItem.word)
-            ]))).label('new_words'),
-            func.count(func.distinct(case([
-                (DictationTaskItem.review_count > 0, DictationTaskItem.word)
-            ]))).label('review_words')
+        stats = DictationDetail.query.join(
+            DictationSession
+        ).filter(
+            DictationSession.child_id == child_id,
+            func.date(DictationSession.created_at) == date
+        ).with_entities(
+            func.count(DictationDetail.id).label('total_words'),
+            func.sum(DictationDetail.is_correct.cast(Integer)).label('correct_words')
         ).first()
         
         # 获取已掌握的词数
-        mastered = DictationTaskItem.query.join(
-            DictationTask
+        mastered = DictationDetail.query.join(
+            DictationSession
         ).filter(
-            DictationTask.child_id == child_id,
-            func.date(DictationTask.created_at) <= date
+            DictationSession.child_id == child_id,
+            func.date(DictationSession.created_at) <= date
         ).group_by(
-            DictationTaskItem.word
+            DictationDetail.word
         ).having(
-            func.sum(DictationTaskItem.is_correct.cast(Integer)) / func.count(DictationTaskItem.id) >= 0.8
+            func.sum(DictationDetail.is_correct.cast(Integer)) / func.count(DictationDetail.id) >= 0.8
         ).count()
         
         # 获取困难词
-        difficult_words = DictationTaskItem.query.join(
-            DictationTask
+        difficult_words = DictationDetail.query.join(
+            DictationSession
         ).filter(
-            DictationTask.child_id == child_id,
-            func.date(DictationTask.created_at) == date
+            DictationSession.child_id == child_id,
+            func.date(DictationSession.created_at) == date
         ).group_by(
-            DictationTaskItem.word
+            DictationDetail.word
         ).having(
-            func.count(DictationTaskItem.id) >= 3,
-            func.sum(case([(DictationTaskItem.is_correct == False, 1)], else_=0)) / func.count(DictationTaskItem.id) >= 0.4
+            func.count(DictationDetail.id) >= 3,
+            func.sum(case([(DictationDetail.is_correct == False, 1)], else_=0)) / func.count(DictationDetail.id) >= 0.4
         ).with_entities(
-            DictationTaskItem.word,
-            func.sum(case([(DictationTaskItem.is_correct == False, 1)], else_=0)).label('error_count'),
-            func.count(DictationTaskItem.id).label('total_count')
+            DictationDetail.word,
+            func.sum(case([(DictationDetail.is_correct == False, 1)], else_=0)).label('error_count'),
+            func.count(DictationDetail.id).label('total_count')
         ).all()
         
         return jsonify({

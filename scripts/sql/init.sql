@@ -1,34 +1,155 @@
 -- 设置字符集
 SET NAMES utf8mb4;
-SET CHARACTER SET utf8mb4;
 
--- 创建数据库（如果不存在）
+-- 创建数据库
 CREATE DATABASE IF NOT EXISTS dictation
-CHARACTER SET utf8mb4
-COLLATE utf8mb4_unicode_ci;
+CHARACTER SET = utf8mb4
+COLLATE = utf8mb4_unicode_ci;
 
 USE dictation;
 
 -- 创建用户表
 CREATE TABLE IF NOT EXISTS users (
-    id INT PRIMARY KEY AUTO_INCREMENT, 
-    openid VARCHAR(32) UNIQUE NOT NULL,
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    openid VARCHAR(64) UNIQUE NOT NULL,
     nickname VARCHAR(32),
     avatar_url VARCHAR(256),
-    is_admin BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
+    is_admin BOOLEAN DEFAULT false,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 创建家庭表
 CREATE TABLE IF NOT EXISTS families (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(32) NOT NULL,
-    created_by INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_by INT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (created_by) REFERENCES users(id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建孩子表
+CREATE TABLE IF NOT EXISTS children (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    user_id INT NOT NULL,
+    family_id INT NOT NULL,
+    child_id INT NOT NULL,
+    nickname VARCHAR(32) NOT NULL,
+    province VARCHAR(32),
+    city VARCHAR(32),
+    grade INT,
+    semester INT,
+    textbook_version VARCHAR(32),
+    is_deleted BOOLEAN DEFAULT false NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建听写会话表
+CREATE TABLE IF NOT EXISTS dictation_sessions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    child_id INT NOT NULL,
+    session_type VARCHAR(20) NOT NULL,
+    status VARCHAR(20) DEFAULT 'in_progress',
+    current_word_index INT DEFAULT 0,
+    total_words INT DEFAULT 0,
+    correct_words INT DEFAULT 0,
+    accuracy FLOAT DEFAULT 0.0,
+    score FLOAT DEFAULT 0.0,
+    total_time INT DEFAULT 0,
+    start_time DATETIME,
+    end_time DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (child_id) REFERENCES children(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建听写详情表
+CREATE TABLE IF NOT EXISTS dictation_details (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    session_id INT NOT NULL,
+    yuwen_item_id INT NOT NULL,
+    word VARCHAR(100) NOT NULL,
+    is_correct BOOLEAN DEFAULT FALSE,
+    user_input VARCHAR(100),
+    retry_count INT DEFAULT 0,
+    error_count INT DEFAULT 0,
+    last_wrong_time DATETIME,
+    time_spent INT DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES dictation_sessions(id),
+    FOREIGN KEY (yuwen_item_id) REFERENCES yuwen_items(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建听写配置表
+CREATE TABLE IF NOT EXISTS dictation_configs (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    session_id INT NOT NULL,
+    child_id INT NOT NULL,
+    words_per_dictation INT DEFAULT 10,
+    review_days INT DEFAULT 3,
+    dictation_interval INT DEFAULT 5,
+    dictation_ratio INT DEFAULT 100,
+    dictation_mode VARCHAR(20) DEFAULT 'unit',
+    retry_limit INT DEFAULT 3,
+    auto_play BOOLEAN DEFAULT true,
+    wrong_words_only BOOLEAN DEFAULT false,
+    random_order BOOLEAN DEFAULT false,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 创建语文词条表
+CREATE TABLE IF NOT EXISTS yuwen_items (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    word VARCHAR(32) NOT NULL,
+    pinyin VARCHAR(64),
+    hint VARCHAR(128),
+    type VARCHAR(32),
+    unit VARCHAR(32),
+    lesson INT,
+    lesson_name VARCHAR(64),
+    grade INT,
+    semester INT,
+    textbook_version VARCHAR(32),
+    audio_url VARCHAR(256),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 插入初始数据
+INSERT INTO yuwen_items (word, pinyin, type, unit, lesson, grade, semester, textbook_version) VALUES
+('和睦', 'hé mù', '词语', '一单元', 1, 4, 1, '人教版'),
+('友爱', 'yǒu ài', '词语', '一单元', 1, 4, 1, '人教版');
+
+-- 添加外键约束和索引
+ALTER TABLE children
+    ADD CONSTRAINT fk_children_user FOREIGN KEY (user_id) REFERENCES users(id),
+    ADD CONSTRAINT fk_children_family FOREIGN KEY (family_id) REFERENCES families(id),
+    ADD UNIQUE KEY unique_user_child (user_id, child_id);
+
+ALTER TABLE dictation_sessions
+    ADD CONSTRAINT fk_sessions_child FOREIGN KEY (child_id) REFERENCES children(id);
+
+ALTER TABLE dictation_details
+    ADD CONSTRAINT fk_details_session FOREIGN KEY (session_id) REFERENCES dictation_sessions(id);
+
+ALTER TABLE dictation_configs
+    ADD CONSTRAINT fk_configs_session FOREIGN KEY (session_id) REFERENCES dictation_sessions(id),
+    ADD CONSTRAINT fk_configs_child FOREIGN KEY (child_id) REFERENCES children(id);
+
+-- 添加索引
+CREATE INDEX idx_users_openid ON users(openid);
+CREATE INDEX idx_children_user ON children(user_id);
+CREATE INDEX idx_children_family ON children(family_id);
+CREATE INDEX idx_sessions_child ON dictation_sessions(child_id);
+CREATE INDEX idx_details_session ON dictation_details(session_id);
+CREATE INDEX idx_configs_session ON dictation_configs(session_id);
+CREATE INDEX idx_configs_child ON dictation_configs(child_id);
+CREATE INDEX idx_yuwen_items_word ON yuwen_items(word);
+CREATE INDEX idx_yuwen_items_lesson ON yuwen_items(grade, semester, textbook_version, unit, lesson);
 
 -- 创建用户家庭关系表
 CREATE TABLE IF NOT EXISTS user_family_relations (
@@ -42,99 +163,6 @@ CREATE TABLE IF NOT EXISTS user_family_relations (
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (family_id) REFERENCES families(id),
     UNIQUE KEY unique_user_family_relation (user_id, family_id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 创建孩子表
-CREATE TABLE IF NOT EXISTS children (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    family_id INT NOT NULL,
-    child_id INT NOT NULL,
-    nickname VARCHAR(80) NOT NULL,
-    province VARCHAR(50),
-    city VARCHAR(50),
-    grade INT,
-    semester INT,
-    textbook_version VARCHAR(20),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (family_id) REFERENCES families(id),
-    UNIQUE KEY unique_user_family_child (user_id, family_id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 创建语文条目表
-CREATE TABLE IF NOT EXISTS yuwen_items (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    word VARCHAR(32) NOT NULL,
-    pinyin VARCHAR(32),
-    type VARCHAR(32),
-    unit INT NOT NULL,
-    lesson INT NOT NULL,
-    lesson_name VARCHAR(32),
-    grade INT NOT NULL,
-    semester INT NOT NULL,
-    textbook_version VARCHAR(32),
-    audio_url VARCHAR(256),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_word_grade_version (word, grade, semester, textbook_version)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 创建听写任务表
-CREATE TABLE IF NOT EXISTS dictation_tasks (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    child_id INT NOT NULL,
-    name VARCHAR(32),
-    type VARCHAR(32),
-    status VARCHAR(32) DEFAULT 'pending',
-    total_words INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (child_id) REFERENCES children(id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 创建听写任务项表
-CREATE TABLE IF NOT EXISTS dictation_task_items (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    task_id INT NOT NULL,
-    yuwen_item_id INT NOT NULL,
-    order_num INT NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (task_id) REFERENCES dictation_tasks(id),
-    FOREIGN KEY (yuwen_item_id) REFERENCES yuwen_items(id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 创建听写会话表
-CREATE TABLE IF NOT EXISTS dictation_sessions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    task_id INT NOT NULL,
-    start_time DATETIME,
-    end_time DATETIME,
-    total_words INT,
-    correct_count INT DEFAULT 0,
-    accuracy_rate FLOAT,
-    status VARCHAR(32) DEFAULT 'ongoing',
-    time_spent INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (task_id) REFERENCES dictation_tasks(id)
-) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 创建听写详情表
-CREATE TABLE IF NOT EXISTS dictation_details (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    session_id INT NOT NULL,
-    task_item_id INT NOT NULL,
-    user_input VARCHAR(32),
-    is_correct BOOLEAN,
-    time_spent INT,  -- 单词用时(秒)
-    retry_count INT DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (session_id) REFERENCES dictation_sessions(id),
-    FOREIGN KEY (task_item_id) REFERENCES dictation_task_items(id)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建词语学习状态表
@@ -151,59 +179,6 @@ CREATE TABLE IF NOT EXISTS word_learning_status (
     FOREIGN KEY (child_id) REFERENCES children(id),
     UNIQUE KEY unique_child_word (child_id, word)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 创建听写配置表
-CREATE TABLE IF NOT EXISTS dictation_configs (
-    id INT PRIMARY KEY AUTO_INCREMENT,
-    child_id INT NOT NULL,
-    words_per_dictation INT DEFAULT 10,
-    review_days INT DEFAULT 3,
-    dictation_interval INT DEFAULT 5,
-    dictation_ratio INT DEFAULT 100,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (child_id) REFERENCES children(id),
-    UNIQUE KEY unique_child_config (child_id)
-);
-
--- 创建索引
--- 用户相关索引
-CREATE INDEX idx_user_openid ON users(openid);
-
--- 家庭相关索引
-CREATE INDEX idx_family_created_by ON families(created_by);
-
--- 用户家庭关系索引
-CREATE INDEX idx_user_family_relation ON user_family_relations(user_id, family_id);
-
--- 孩子相关索引
-CREATE INDEX idx_child_user ON children(user_id);
-CREATE INDEX idx_child_family ON children(family_id);
-CREATE INDEX idx_child_grade ON children(grade, semester);
-
--- 语文条目索引
-CREATE INDEX idx_yuwen_grade ON yuwen_items(grade, semester, unit);
-CREATE INDEX idx_yuwen_word ON yuwen_items(word);
-CREATE INDEX idx_yuwen_version ON yuwen_items(textbook_version);
-
--- 听写任务相关索引
-CREATE INDEX idx_task_child ON dictation_tasks(child_id);
-CREATE INDEX idx_task_status ON dictation_tasks(status);
-CREATE INDEX idx_task_type ON dictation_tasks(type);
-
--- 听写会话相关索引
-CREATE INDEX idx_session_task ON dictation_sessions(task_id);
-CREATE INDEX idx_session_status ON dictation_sessions(status);
-CREATE INDEX idx_session_time ON dictation_sessions(start_time, end_time);
-
--- 听写详情相关索引
-CREATE INDEX idx_detail_session ON dictation_details(session_id);
-CREATE INDEX idx_detail_task_item ON dictation_details(task_item_id);
-CREATE INDEX idx_detail_correct ON dictation_details(is_correct);
-
--- 词语学习状态索引
-CREATE INDEX idx_learning_status ON word_learning_status(child_id, word, learning_stage);
-CREATE INDEX idx_learning_review ON word_learning_status(next_review);
 
 -- 创建家庭成员表
 CREATE TABLE IF NOT EXISTS family_members (

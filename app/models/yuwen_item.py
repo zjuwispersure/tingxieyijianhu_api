@@ -3,42 +3,47 @@ from sqlalchemy import and_
 from .base import BaseModel
 from .database import db
 from flask import current_app
+from ..utils.oss import get_signed_url
 
 class YuwenItem(BaseModel):
     """存储教材原始数据"""
     __tablename__ = 'yuwen_items'
 
     id = db.Column(db.Integer, primary_key=True)
-    word = db.Column(db.String(50), nullable=False)  # 词语/字
-    pinyin = db.Column(db.String(100))  # 拼音
-    type = db.Column(db.String(20), nullable=False)  # 类型:识字/写字/词语
-    unit = db.Column(db.Integer, nullable=False)  # 单元
-    lesson = db.Column(db.Integer, nullable=False)  # 第几课
-    lesson_name = db.Column(db.String(100))  # 课文名称
-    grade = db.Column(db.Integer, nullable=False)  # 年级
-    semester = db.Column(db.Integer, nullable=False)  # 学期
-    textbook_version = db.Column(db.String(20), nullable=False)  # 教材版本
-    audio_url = db.Column(db.String(200))  # 音频URL
+    word = db.Column(db.String(32), nullable=False)  # 汉字/词语
+    pinyin = db.Column(db.String(64))  # 拼音
+    hint = db.Column(db.String(128))  # 提示信息
+    type = db.Column(db.String(32))  # 类型：识字/写字/词语
+    unit = db.Column(db.String(32))  # 单元
+    lesson = db.Column(db.Integer)  # 课文序号
+    lesson_name = db.Column(db.String(64))  # 课文名称
+    grade = db.Column(db.Integer)  # 年级
+    semester = db.Column(db.Integer)  # 学期
+    textbook_version = db.Column(db.String(32))  # 教材版本
+    audio_url = db.Column(db.String(256))  # 音频URL
+    
+    # 关系
+    dictation_details = db.relationship('DictationDetail', back_populates='yuwen_item')
     
     def __repr__(self):
         return f'<YuwenItem {self.word}>'
 
     def to_dict(self):
         """转换为字典"""
+        current_app.logger.debug(f"Converting YuwenItem to dict, audio_url: {self.audio_url}")
+        audio_url = get_signed_url(self.audio_url) if self.audio_url else None
+        current_app.logger.debug(f"Signed audio_url: {audio_url}")
+        
         return {
             'id': self.id,
             'word': self.word,
             'pinyin': self.pinyin,
+            'hint': self.hint,
             'type': self.type,
             'unit': self.unit,
             'lesson': self.lesson,
             'lesson_name': self.lesson_name,
-            'grade': self.grade,
-            'semester': self.semester,
-            'textbook_version': self.textbook_version,
-            'audio_url': self.audio_url,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'audio_url': audio_url
         } 
 
     @classmethod
@@ -127,15 +132,25 @@ class YuwenItem(BaseModel):
 
     @classmethod
     def get_items_by_lesson_id(cls, grade: int, semester: int, 
-                              textbook_version: str, lesson: int) -> List['YuwenItem']:
+                              textbook_version: str, lesson: int,
+                              type: Optional[str] = None) -> List['YuwenItem']:
         """根据课次ID获取词语列表"""
         try:
-            return cls.query.filter(and_(
+            current_app.logger.info(f"Querying items with params: grade={grade}, semester={semester}, "
+                                  f"textbook_version={textbook_version}, lesson={lesson}, type={type}")
+            query = cls.query.filter(and_(
                 cls.grade == grade,
                 cls.semester == semester,
                 cls.textbook_version == textbook_version,
                 cls.lesson == lesson
-            )).order_by(cls.id).all()
+            ))
+            
+            if type:
+                query = query.filter(cls.type == type)
+                
+            items = query.order_by(cls.id).all()
+            current_app.logger.info(f"Found {len(items)} items")
+            return items
         except Exception as e:
             current_app.logger.error(f"Error in get_items_by_lesson_id: {str(e)}", exc_info=True)
             raise

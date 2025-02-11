@@ -3,9 +3,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from sqlalchemy import func
 from datetime import datetime, timedelta
 
-from app.models.dictation_task import DictationTaskItem
 from app.utils.decorators import admin_required, log_api_call
-from ..models import User, Child, DictationTask, YuwenItem
+from ..models import User, Child, DictationSession, YuwenItem, DictationDetail
 from ..extensions import db
 from ..utils.logger import logger
 from ..utils.error_codes import *
@@ -64,10 +63,12 @@ def get_users():
         result = []
         for user in pagination.items:
             children_count = Child.query.filter_by(user_id=user.id).count()
-            last_task = DictationTask.query.filter_by(
-                user_id=user.id
+            last_session = DictationSession.query.join(
+                Child
+            ).filter(
+                Child.user_id == user.id
             ).order_by(
-                DictationTask.created_at.desc()
+                DictationSession.created_at.desc()
             ).first()
             
             result.append({
@@ -75,7 +76,7 @@ def get_users():
                 'nickname': user.nickname,
                 'created_at': user.created_at.isoformat(),
                 'children_count': children_count,
-                'last_active': last_task.created_at.isoformat() if last_task else None
+                'last_active': last_session.created_at.isoformat() if last_session else None
             })
             
         return jsonify({
@@ -203,7 +204,7 @@ def get_admin_stats():
         # 获取总体统计
         total_users = User.query.count()
         total_children = Child.query.count()
-        total_tasks = DictationTask.query.count()
+        total_tasks = DictationSession.query.count()
         total_words = YuwenItem.query.count()
         
         # 获取每日统计
@@ -215,20 +216,20 @@ def get_admin_stats():
                 func.date(User.created_at) == date
             ).count()
             
-            active_users = DictationTask.query.filter(
-                func.date(DictationTask.created_at) == date
+            active_users = DictationSession.query.filter(
+                func.date(DictationSession.created_at) == date
             ).with_entities(
-                func.count(func.distinct(DictationTask.user_id))
+                func.count(func.distinct(DictationSession.child_id))
             ).scalar()
             
-            tasks = DictationTask.query.filter(
-                func.date(DictationTask.created_at) == date
+            tasks = DictationSession.query.filter(
+                func.date(DictationSession.created_at) == date
             ).count()
             
-            words = DictationTaskItem.query.join(
-                DictationTask
+            words = DictationDetail.query.join(
+                DictationSession
             ).filter(
-                func.date(DictationTask.created_at) == date
+                func.date(DictationSession.created_at) == date
             ).count()
             
             daily_stats.append({

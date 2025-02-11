@@ -7,14 +7,17 @@ class Family(BaseModel):
     """家庭模型"""
     __tablename__ = 'families'
     
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(32))
-    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    name = db.Column(db.String(32), nullable=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'))
     
     # 关系
     members = db.relationship('FamilyMember', backref='family', lazy=True)
     children = db.relationship('Child', back_populates='family', lazy=True)
-    creator = db.relationship('User', backref='created_families', lazy=True)
+    creator = db.relationship('User', 
+        foreign_keys=[created_by],
+        backref=db.backref('created_families', lazy=True)
+    )
     user_relations = db.relationship('UserFamilyRelation', back_populates='family')
 
     @classmethod

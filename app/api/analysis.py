@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, g
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from app.utils.decorators import log_api_call
-from ..models import Child, DictationTask, DictationTaskItem, YuwenItem
+from ..models import Child, DictationSession, DictationDetail, YuwenItem
 from ..extensions import db
 from ..utils.logger import logger
 from ..utils.error_codes import *
@@ -76,12 +76,12 @@ def get_error_pattern():
         start_date = datetime.now() - timedelta(days=days)
         
         # 获取错误数据
-        errors = DictationTaskItem.query.join(
-            DictationTask
+        errors = DictationDetail.query.join(
+            DictationSession
         ).filter(
-            DictationTask.child_id == child_id,
-            DictationTask.created_at >= start_date,
-            DictationTaskItem.is_correct == False
+            DictationSession.child_id == child_id,
+            DictationSession.created_at >= start_date,
+            DictationDetail.is_correct == False
         ).all()
         
         total_errors = len(errors)
@@ -102,23 +102,23 @@ def get_error_pattern():
                 error_types[error_type]['examples'][key] = error_types[error_type]['examples'].get(key, 0) + 1
                 
         # 获取高频错误词
-        difficult_words = DictationTaskItem.query.join(
-            DictationTask
+        difficult_words = DictationDetail.query.join(
+            DictationSession
         ).filter(
-            DictationTask.child_id == child_id,
-            DictationTask.created_at >= start_date
+            DictationSession.child_id == child_id,
+            DictationSession.created_at >= start_date
         ).group_by(
-            DictationTaskItem.word
+            DictationDetail.word
         ).having(
-            func.count(DictationTaskItem.id) >= 3,
-            func.sum(case([(DictationTaskItem.is_correct == False, 1)], else_=0)) / func.count(DictationTaskItem.id) >= 0.4
+            func.count(DictationDetail.id) >= 3,
+            func.sum(case([(DictationDetail.is_correct == False, 1)], else_=0)) / func.count(DictationDetail.id) >= 0.4
         ).with_entities(
-            DictationTaskItem.word,
-            func.sum(case([(DictationTaskItem.is_correct == False, 1)], else_=0)).label('error_count'),
-            func.count(DictationTaskItem.id).label('total_count'),
-            func.max(case([(DictationTaskItem.is_correct == False, DictationTaskItem.created_at)])).label('last_wrong')
+            DictationDetail.word,
+            func.sum(case([(DictationDetail.is_correct == False, 1)], else_=0)).label('error_count'),
+            func.count(DictationDetail.id).label('total_count'),
+            func.max(case([(DictationDetail.is_correct == False, DictationDetail.created_at)])).label('last_wrong')
         ).order_by(
-            func.sum(case([(DictationTaskItem.is_correct == False, 1)], else_=0)).desc()
+            func.sum(case([(DictationDetail.is_correct == False, 1)], else_=0)).desc()
         ).limit(10).all()
         
         # 格式化返回数据
