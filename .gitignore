@@ -85,3 +85,10 @@ docker-compose.override.yml
 
 # Migration
 migrations/versions/ 
+
+# 添加以下内容
+.env
+*.log
+__pycache__/
+*.pyc
+.pytest_cache/ 
