@@ -1,4 +1,4 @@
-from .database import db
+from app.extensions import db
 from .user import User
 from .family import Family, UserFamilyRelation
 from .child import Child

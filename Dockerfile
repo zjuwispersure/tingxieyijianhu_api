@@ -12,12 +12,15 @@ RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua
 RUN pip install oss2
 RUN pip install aliyun-python-sdk-sts aliyun-python-sdk-core
 
-COPY . .
+COPY . .    
 
 ENV PYTHONPATH=/app
 ENV FLASK_APP=wsgi.py
-ENV FLASK_ENV=development
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--reload", "wsgi:app"]
+# 通过 GUNICORN_RELOAD 环境变量控制 reload（开发用--reload，生产不用）
+CMD gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 ${GUNICORN_RELOAD} wsgi:app
+
+RUN apt-get update && apt-get install -y netcat-openbsd
+RUN apt-get update && apt-get install -y vim

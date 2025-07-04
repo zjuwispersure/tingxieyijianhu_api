@@ -6,14 +6,7 @@ services:
     env_file:
       - .env
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_VARIABLES: |
-        wait_timeout=28800
-        interactive_timeout=28800
-      TZ: Asia/Shanghai
+      - TZ=Asia/Shanghai
     command:
       - --wait_timeout=28800
       - --interactive_timeout=28800
@@ -24,7 +17,7 @@ services:
       - --default-time-zone=+8:00
       - --bind-address=0.0.0.0
     ports:
-      - "3306:3306"
+      - "13306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
@@ -44,7 +37,7 @@ services:
         max-file: "3"
 
   yuwen:
-    build: .
+    image: registry.cn-hangzhou.aliyuncs.com/mini_program/tingxie:latest
     env_file:
       - .env
     ports:
@@ -55,13 +48,8 @@ services:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
       - FLASK_DEBUG=1
-      - SQLALCHEMY_DATABASE_URI=${SQLALCHEMY_DATABASE_URI}
-      - REDIS_URL=${REDIS_URL}
       - DATA_DIR=/app/data
       - TZ=Asia/Shanghai
-      - MYSQL_USER=${MYSQL_USER}
-      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
-      - MYSQL_DATABASE=${MYSQL_DATABASE}
       - ALIBABA_CLOUD_ECS_METADATA=${ALIBABA_CLOUD_ECS_METADATA:-false}
     volumes:
       - .:/app
@@ -98,7 +86,7 @@ services:
     image: redis:6.2
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "16379:6379"
     volumes:
       - redis_data:/data
     networks:

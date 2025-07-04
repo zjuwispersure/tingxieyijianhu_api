@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from config import Config, get_config
-from .models.database import db, init_db
+from .extensions import db, init_extensions
 from .api import init_api
 from .utils.cache import cache
 from .utils.json_encoder import CustomJSONEncoder
@@ -10,6 +10,7 @@ import logging
 import os
 from sqlalchemy.exc import OperationalError
 import time
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +65,7 @@ def create_app(config_name=None):
         logging.getLogger('sqlalchemy').setLevel(logging.WARNING)
     
     # 初始化扩展
-    db.init_app(app)
+    init_extensions(app)
     
     # 初始化其他扩展
     migrate = Migrate(app, db)
@@ -105,12 +106,16 @@ def create_app(config_name=None):
             'message': 'token已过期，请重新登录'
         }), 401
     
-    # 初始化数据库
-    try:
-        init_db(app)
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {str(e)}")
-        raise
+    # 确保所有模型被导入，便于 Flask-Migrate 检测
+    from app import models
+    
+    # 只在不是 Flask CLI 命令时才初始化数据库，防止迁移死循环
+    if not (len(sys.argv) > 1 and sys.argv[1] in ['db', 'migrate', 'upgrade', 'downgrade', 'init']):
+        try:
+            init_extensions(app)
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {str(e)}")
+            raise
     
     @app.before_request
     def before_request():
@@ -177,4 +182,4 @@ def create_app(config_name=None):
 __all__ = ['create_app', 'db']
 
 # 导入数据库实例
-from .models.database import db  # noqa 
+from .extensions import db  # noqa 

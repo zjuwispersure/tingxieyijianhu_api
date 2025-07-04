@@ -1,6 +1,6 @@
-from flask_sqlalchemy import SQLAlchemy
+from app.extensions import db
 
-db = SQLAlchemy()
+# 保留 init_db 作为占位（如有需要可重构为工具函数），否则可删除整个文件。
 
 def init_db(app):
     """初始化数据库"""

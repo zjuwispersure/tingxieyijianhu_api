@@ -1,6 +1,6 @@
 from datetime import datetime
 from .base import BaseModel
-from .database import db
+from app.extensions import db
 
 class User(BaseModel):
     """用户模型"""

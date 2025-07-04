@@ -1,4 +1,15 @@
 #!/bin/bash
+export FLASK_APP=wsgi.py
+export PYTHONPATH=/app
+# flask db init
+# flask db migrate -m "init"
+
+set -e
+
+cd /app
+
+# 设置 Flask 环境变量
+export FLASK_APP=wsgi.py
 
 # 等待 MySQL 就绪
 echo "Waiting for MySQL to be ready..."
@@ -20,4 +31,4 @@ python scripts/import_yuwen_data.py
 echo "Generating audio files..."
 python scripts/batch_generate_audio.py
 
-echo "Database initialization completed!" 
+echo "Database initialization completed!"
